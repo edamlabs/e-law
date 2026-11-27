@@ -34,8 +34,8 @@ fn texts(value: &Value) -> Result<Vec<&str>, Fault> {
         .collect()
 }
 
-fn interpreter() -> Option<PathBuf> {
-    let out = Command::new("uv").args(["python", "find", "3.14"]).output().ok()?;
+fn interpreter(version: &str) -> Option<PathBuf> {
+    let out = Command::new("uv").args(["python", "find", version]).output().ok()?;
     let python = PathBuf::from(String::from_utf8(out.stdout).ok()?.trim());
     python.is_file().then_some(python)
 }
@@ -212,8 +212,14 @@ fn bank_embedded_decodes_and_is_not_empty_through_a_check() -> Outcome {
 
 #[test]
 fn bank_regenerates_byte_identical_from_its_generator() -> Outcome {
-    let Some(python) = interpreter() else {
-        writeln!(io::stderr(), "SKIP: uv-managed python 3.14 cannot be found")?;
+    let kept = fs::read_to_string(BANK)?;
+    let version = serde_json::from_str::<Value>(&kept)?["python"]
+        .as_str()
+        .ok_or("no python")?
+        .to_owned();
+    // The bank names the interpreter it came from; regeneration is deliberate, never "any 3.14".
+    let Some(python) = interpreter(&version) else {
+        writeln!(io::stderr(), "SKIP: uv-managed python {version} cannot be found")?;
         return Ok(());
     };
     let out = Command::new("uv")
@@ -225,7 +231,6 @@ fn bank_regenerates_byte_identical_from_its_generator() -> Outcome {
         .output()?;
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let fresh = String::from_utf8(out.stdout)?;
-    let kept = fs::read_to_string(BANK)?;
     assert_eq!(
         serde_json::from_str::<Value>(&fresh)?["python"],
         serde_json::from_str::<Value>(&kept)?["python"],
