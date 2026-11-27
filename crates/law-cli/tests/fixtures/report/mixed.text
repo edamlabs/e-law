@@ -1,0 +1,30 @@
+pk/dir ñ/ñandú.py:3:5: t.swap use new
+pk/dir ñ/ñandú.py:6:1: t.elif no elif
+pk/dir ñ/ñandú.py:8:1: t.untagged untagged rule
+pk/other/many.py:1:6: t.lambda no lambda
+pk/other/many.py:2:6: t.lambda no lambda
+pk/other/many.py:3:6: t.lambda no lambda
+pk/other/many.py:4:6: t.lambda no lambda
+pk/other/many.py:5:6: t.lambda no lambda
+pk/other/many.py:6:6: t.lambda no lambda
+pk/other/many.py:7:6: t.lambda no lambda
+pk/other/many.py:8:6: t.lambda no lambda
+pk/other/many.py:9:6: t.lambda no lambda
+pk/other/many.py:10:6: t.lambda no lambda
+pk/other/many.py:11:7: t.lambda no lambda
+pk/other/many.py:12:7: t.lambda no lambda
+pk/other/many.py:13:7: t.lambda no lambda
+pk/other/many.py:14:7: t.lambda no lambda
+pk/other/many.py:15:7: t.lambda no lambda
+pk/other/many.py:16:7: t.lambda no lambda
+pk/other/many.py:17:7: t.lambda no lambda
+pk/other/many.py:18:7: t.lambda no lambda
+pk/other/many.py:19:7: t.lambda no lambda
+pk/other/many.py:20:7: t.lambda no lambda
+pk/other/many.py:21:7: t.lambda no lambda
+pk/other/many.py:22:7: t.lambda no lambda
+pk/other/many.py:23:7: t.lambda no lambda
+pk/other/many.py:24:7: t.lambda no lambda
+pk/other/many.py:25:7: t.lambda no lambda
+
+Found 28 findings (3 errors, 25 warnings).

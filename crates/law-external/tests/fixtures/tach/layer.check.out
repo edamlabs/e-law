@@ -1,0 +1,21 @@
+[
+  {
+    "Located": {
+      "file_path": "src/pkg/core/model.py",
+      "line_number": 2,
+      "original_line_number": 2,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "LayerViolation": {
+            "dependency": "pkg.ui.view",
+            "usage_module": "pkg.core",
+            "usage_layer": "core",
+            "definition_module": "pkg.ui",
+            "definition_layer": "ui"
+          }
+        }
+      }
+    }
+  }
+]

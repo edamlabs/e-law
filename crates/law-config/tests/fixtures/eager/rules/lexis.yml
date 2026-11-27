@@ -1,0 +1,16 @@
+- id: lexis.elif
+  message: "elif is a decision table nobody wrote down"   # one line, no newline: validated
+  tags: {law: "5", set: LEXIS, principle: dispatch}
+  scope:
+    include: ["src/**/*.py"]        # globs from the project root; default ["**/*.py"]
+    exclude: ["**/ops/**"]          # default []
+    kind: engine                    # optional: an entity kind declared by a profile
+  severity: error                   # error | warning; default error
+  check:
+    engine: pattern                 # the tag of the Check enum
+    rule: {kind: elif_clause}       # the rest is that engine's spec
+  fix: {safety: none, reason: "the table has to be designed"}   # safe | unsafe | none(+reason, required)
+  cases:
+    valid:   [{code: "x = a if c else b\n"}]
+    invalid: [{path: "src/pkg/logic/x.py", code: "if a:\n  pass\nelif b:\n  pass\n"}]
+    fixed:   []                     # {path?, code, expect}: after the fix, code == expect and check is silent

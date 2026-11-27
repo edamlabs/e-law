@@ -1,0 +1,493 @@
+- id: symbolon.no-any-field
+  formerly: [any-annotation]
+  message: "Any hides the type: name it — ruff ANN401 holds a signature's top level, this rule a field, a variable and a type argument"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      all:
+        - any:
+            - {kind: identifier, regex: '^Any$'}
+            - {kind: attribute, regex: '^typing\.Any$'}
+        - inside: {kind: type, stopBy: end}
+        - not:
+            inside:
+              kind: type
+              any:
+                - inside: {kind: typed_parameter}
+                - inside: {kind: typed_default_parameter}
+                - inside: {kind: function_definition, field: return_type}
+  fix: {safety: none, reason: "the real type is a fact about the data that the annotation does not hold"}
+  cases:
+    valid:
+      - "def f(x: Any) -> Any: ..."
+      - "def f(*args: Any, **kwargs: Any) -> None: ..."
+      - "x: Mapping[str, Branch]"
+      - 'y = cast("Any", z)'
+    invalid:
+      - "x: Any = None"
+      - "class A:\n    rule: dict[str, Any]\n"
+      - "def f(x: Mapping[str, Any]) -> None: ..."
+      - "def f() -> list[Any]: ..."
+      - "type Row = Mapping[str, typing.Any]"
+
+- id: symbolon.no-object
+  formerly: [object-annotation]
+  message: "object is avoidable: a generic that hides the type — name it, bind a type parameter or a Protocol; where anything at all is the contract: register an exception"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      all:
+        - {kind: identifier, regex: '^object$'}
+        - inside: {kind: type, stopBy: end}
+        - not:
+            inside:
+              kind: function_definition
+              stopBy: end
+              has: {field: name, regex: '^__(eq|ne|contains|exit|aexit|setattr)__$'}
+  fix: {safety: none, reason: "a named type, a type parameter or a Protocol are three designs, and some places truly take anything"}
+  cases:
+    valid:
+      - "def __eq__(self, other: object) -> bool: ..."
+      - "async def __aexit__(self, *exc: object) -> None: ..."
+      - "def f[T](x: T) -> T: ..."
+    invalid:
+      - "def f(x: object) -> None: ..."
+      - "x: Mapping[str, object]"
+      - "def f() -> object: ..."
+      - "def f(*args: object) -> None: ..."
+
+- id: symbolon.no-object-base
+  message: "no `object` among the bases: every class inherits from it already — name the base you mean or write none"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: UP004}
+  fix: {safety: safe}
+  cases:
+    valid:
+      - "class Unit: ...\n"
+      - "class Unit(Base): ...\n"
+    invalid:
+      - "class Unit(object): ...\n"
+      - "class Unit(object, Base): ...\n"
+    fixed:
+      - code: "class Unit(object): ...\n"
+        expect: "class Unit: ...\n"
+      - code: "class Unit(object, Base): ...\n"
+        expect: "class Unit(Base): ...\n"
+
+- id: symbolon.no-cast
+  formerly: [cast]
+  message: "no cast: it tells the checker what is not proven — narrow, type the source or fix the stub; one that survives: register an exception"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: call
+      has: {field: function, regex: '^(typing\.)?cast$'}
+      not:
+        has: {field: arguments, regex: '^\(\s*"?LiteralString"?\s*,'}
+  fix: {safety: none, reason: "removing the cast turns a silenced claim into a checker error that only narrowing or a typed source resolves"}
+  cases:
+    valid:
+      - "x = convert(value, T)"
+      - "sql = cast(LiteralString, text)"
+    invalid:
+      - 'x = cast("Any", state)'
+      - "x = typing.cast(int, y)"
+
+- id: symbolon.no-type-ignore
+  formerly: [type-ignore]
+  message: "never silence the checker: `# type: ignore` and `# ty: ignore` hide the failure — fix the annotation; an upstream gap is a marked cast with the diagnostic as its reason"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: comment
+      regex: '^#\s*(type|ty|pyright|mypy):\s*ignore'
+  fix: {safety: none, reason: "deleting the pragma resurfaces the diagnostic it hid, which still has to be fixed"}
+  cases:
+    valid:
+      - "x = 1  # noqa: E501 — the URL"
+      - "### the type is ignored upstream."
+    invalid:
+      - "x = f()  # type: ignore"
+      - "x = f()  # ty: ignore[invalid-type-form]"
+      - "x = f()  # pyright: ignore"
+
+- id: symbolon.no-empty-sentinel
+  formerly: [empty-sentinel]
+  message: 'absence is a type, never a value: `X | None = None` when it may be absent, a non-empty type when it may not — never `""`'
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - all:
+            - kind: assignment
+            - has: {field: type, kind: type}
+            - has: {field: right, kind: string, regex: '^(""|'''')$'}
+        - all:
+            - kind: typed_default_parameter
+            - has: {field: value, kind: string, regex: '^(""|'''')$'}
+        - all:
+            - kind: call
+            - has: {field: function, regex: '^(SecretStr|Secret)$'}
+            - has: {field: arguments, regex: '^\((""|'''')\)$'}
+  fix: {safety: none, reason: "`X | None` or a required non-empty value is a choice, and every reader testing for `\"\"` changes with it"}
+  cases:
+    valid:
+      - "ask: Said | None = None"
+      - 'sep: str = " | "'
+      - 'x = ""'
+      - "def f(a: str | None = None) -> None: ..."
+      - "KEY: SecretStr | None = None"
+    invalid:
+      - 'ask: str = ""'
+      - "code: str = ''"
+      - 'def f(a: str = "") -> None: ...'
+      - 'KEY: SecretStr = SecretStr("")'
+
+- id: symbolon.read-only-field
+  formerly: [mutable-field]
+  message: "a field is read-only at its surface: Mapping, Sequence or tuple, frozenset — never dict, list or set"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: assignment
+      inside: {kind: expression_statement, inside: {kind: block, inside: {kind: class_definition}}}
+      has: {field: type, kind: type, regex: '^(dict|list|set)\['}
+  fix: {safety: none, reason: "a read-only annotation breaks every writer of the field, and a decoder may need the concrete type"}
+  cases:
+    valid:
+      - "class A:\n    m: Mapping[str, int]\n"
+      - "class A:\n    messages: Annotated[list[AnyMessage], add_messages]\n"
+      - "class A:\n    def f(self) -> None:\n        x: dict[str, int] = {}\n"
+    invalid:
+      - "class A:\n    m: dict[str, int]\n"
+      - "class A(BaseSettings):\n    ROUTE: dict[Line, Brand] = Field(default_factory=dict)\n"
+
+- id: symbolon.strenum-not-literal
+  formerly: [literal-alias]
+  message: "a closed set of words is a StrEnum, never a Literal alias"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - all:
+            - kind: type_alias_statement
+            - regex: 'Literal\['
+        - all:
+            - kind: assignment
+            - inside: {kind: expression_statement, inside: {kind: module}}
+            - has: {field: right, regex: '^(typing\.)?Literal\['}
+  fix: {safety: none, reason: "the enum's members are named by hand, and every string literal that meets the alias becomes a member"}
+  cases:
+    valid:
+      - "type Postcode = Annotated[str, Meta(pattern='x')]"
+      - "class Feed(StrEnum):\n    NONE = auto()\n"
+      - "def f(mode: Literal['r']) -> None: ..."
+    invalid:
+      - 'type Feed = Literal["none", "name"]'
+      - 'Feed = Literal["none", "name"]'
+
+- id: symbolon.no-string-getattr
+  formerly: [string-getattr]
+  message: "an attribute is named by the code, not by a string: getattr, hasattr, setattr or delattr with a literal name is banned"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: call
+      all:
+        - has: {field: function, regex: '^(getattr|hasattr|setattr|delattr)$'}
+        - has: {field: arguments, has: {kind: string, nthChild: 2}}
+  fix: {safety: none, reason: "a default or a hasattr test means the attribute may be missing, which plain access would turn into a raise"}
+  cases:
+    valid:
+      - "getattr(state, str(slot))"
+    invalid:
+      - 'getattr(cls, "run", None)'
+      - 'hasattr(kind, "_is_protocol")'
+
+- id: symbolon.final-constant
+  formerly: [final-constant]
+  message: "a module-level constant is Final"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: assignment
+      inside: {kind: expression_statement, inside: {kind: module}}
+      has: {field: left, kind: identifier, regex: '^[A-Z][A-Z0-9_]*$'}
+      not:
+        has: {field: type, kind: type, regex: 'Final'}
+  fix: {safety: none, reason: "wrapping the annotation needs the `Final` import and breaks any rebinding the module still does"}
+  cases:
+    valid:
+      - "LIMIT: Final = 30"
+      - "ELogger = beartype(ELogger)"
+      - "MORNING, NIGHT = 6, 21"
+    invalid:
+      - "PLACEHOLDER_KEY = 'EMPTY'"
+      - "OPEN_TIMEOUT: float = 10.0"
+      - "COLORS: Mapping[str, str] = MappingProxyType({})"
+
+- id: symbolon.with-open-context
+  message: "every resource has a scope: a file is opened in a `with`"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  severity: error
+  check: {engine: ruff, code: SIM115}
+  fix: {safety: none, reason: "ruff offers no fix: what the scope encloses is the author's"}
+  cases:
+    valid:
+      - "def read(name: str) -> str:\n    with open(name) as handle:\n        return handle.read()\n"
+    invalid:
+      - "def read(name: str) -> str:\n    handle = open(name)\n    return handle.read()\n"
+
+- id: symbolon.with-open-path
+  message: "a file is opened through its `Path`, in a `with`: never the builtin `open`"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  severity: error
+  check: {engine: ruff, code: PTH123}
+  fix: {safety: none, reason: "ruff fixes it only in preview"}
+  cases:
+    valid:
+      - "from pathlib import Path\n\n\ndef read(path: Path) -> str:\n    with path.open() as handle:\n        return handle.read()\n"
+    invalid:
+      - "def read(name: str) -> str:\n    with open(name) as handle:\n        return handle.read()\n"
+
+- id: symbolon.no-jump-finally
+  message: "`finally` never returns, breaks or continues: it swallows the exception in flight"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  severity: error
+  check: {engine: ruff, code: B012}
+  fix: {safety: none, reason: "ruff offers no fix: what the jump meant to do has to move out of the cleanup"}
+  cases:
+    valid:
+      - "def run() -> int:\n    try:\n        return 1\n    finally:\n        print('done')\n"
+    invalid:
+      - "def run() -> int:\n    try:\n        return 1\n    finally:\n        return 2\n"
+
+- id: symbolon.no-bare-except-clause
+  message: "catch specific: never a bare `except:`"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  severity: error
+  check: {engine: ruff, code: E722}
+  fix: {safety: none, reason: "ruff offers no fix: which exception fails here is the author's to name"}
+  cases:
+    valid:
+      - "try:\n    run()\nexcept ValueError:\n    stop()\n"
+    invalid:
+      - "try:\n    run()\nexcept:\n    stop()\n"
+
+- id: symbolon.no-bare-except-blind
+  message: "catch specific: `except Exception` only at a boundary, logged and re-raised"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  severity: error
+  check: {engine: ruff, code: BLE001}
+  fix: {safety: none, reason: "ruff offers no fix: which exception fails here is the author's to name"}
+  cases:
+    valid:
+      - "try:\n    run()\nexcept ValueError:\n    stop()\n"
+    invalid:
+      - "try:\n    run()\nexcept Exception:\n    stop()\n"
+
+- id: symbolon.chain-cause
+  message: "chain the cause: re-raise with `raise New(...) from error`"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  severity: error
+  check: {engine: ruff, code: B904}
+  fix: {safety: none, reason: "ruff offers no fix: whether the cause is the error or none is the author's"}
+  cases:
+    valid:
+      - "try:\n    run()\nexcept ValueError as error:\n    raise KeyError('k') from error\n"
+    invalid:
+      - "try:\n    run()\nexcept ValueError:\n    raise KeyError('k')\n"
+
+- id: symbolon.no-any-signature
+  message: "no `Any` atop a signature: name the type, bind a type parameter or a Protocol"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: ANN401}
+  fix: {safety: none, reason: "ruff offers no fix: the type `Any` hides is the author's to name"}
+  cases:
+    valid:
+      - "def run(value: int) -> None: ...\n"
+    invalid:
+      - "from typing import Any\n\n\ndef run(value: Any) -> None: ...\n"
+
+- id: symbolon.modern-syntax-union
+  message: "modern syntax only: `X | Y`, never `Union`"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: UP007}
+  fix: {safety: safe}
+  cases:
+    valid:
+      - "def run(value: int | str) -> None: ...\n"
+    invalid:
+      - "from typing import Union\n\n\ndef run(value: Union[int, str]) -> None: ...\n"
+    fixed:
+      - code: "from typing import Union\n\n\ndef run(value: Union[int, str]) -> None: ...\n"
+        expect: "from typing import Union\n\n\ndef run(value: int | str) -> None: ...\n"
+
+- id: symbolon.modern-syntax-optional
+  message: "modern syntax only: `X | None`, never `Optional`"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: UP045}
+  fix: {safety: safe}
+  cases:
+    valid:
+      - "def run(value: int | None) -> None: ...\n"
+    invalid:
+      - "from typing import Optional\n\n\ndef run(value: Optional[int]) -> None: ...\n"
+    fixed:
+      - code: "from typing import Optional\n\n\ndef run(value: Optional[int]) -> None: ...\n"
+        expect: "from typing import Optional\n\n\ndef run(value: int | None) -> None: ...\n"
+
+- id: symbolon.annotated-argument
+  message: "everything typed: every argument is annotated"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: ANN001}
+  fix: {safety: none, reason: "ruff offers no fix: the argument's type is the author's to name"}
+  cases:
+    valid:
+      - "def run(value: int) -> None: ...\n"
+    invalid:
+      - "def run(value) -> None: ...\n"
+
+- id: symbolon.annotated-return
+  message: "everything typed: every public function's return is annotated"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: ANN201}
+  fix: {safety: none, reason: "ruff infers a return only from what it returns, and unsafely: the type is the author's to name"}
+  cases:
+    valid:
+      - "def run(value: int) -> int:\n    return value\n"
+    invalid:
+      - "def run(value: int):\n    return value\n"
+
+- id: symbolon.no-mutable-default
+  message: "a class attribute is never a mutable default: a frozen value, or a `ClassVar`"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: RUF012}
+  fix: {safety: none, reason: "ruff offers no fix: frozen or ClassVar is the author's choice"}
+  cases:
+    valid:
+      - "class Box:\n    items: tuple[int, ...] = ()\n"
+    invalid:
+      - "class Box:\n    items: list[int] = []\n"
+
+- id: symbolon.typed
+  message: "the types hold: ty finds no error"
+  tags: {law: "13", set: SYMBOLON, principle: Grounded}
+  severity: error
+  check: {engine: ty}
+  fix: {safety: none, reason: "ty offers no fix"}
+  cases:
+    valid:
+      - "size: int = 1\n"
+    invalid:
+      - "size: int = 'one'\n"
+
+- id: symbolon.provider-lifecycle
+  message: "a provider owns its lifecycle: `__aenter__`, `__aexit__` and `health`, its own or inherited"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  scope:
+    exclude: &reserved ["**/__init__.py", "**/models.py", "**/enums.py", "**/state.py", "**/nodes/**"]
+  severity: error
+  check: {engine: profile, kinds: [driver, adapter], aspect: methods}
+  fix: {safety: none, reason: "what opening, closing and health mean for a resource is the provider's to write"}
+  cases:
+    valid:
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class SerperWebDriver:\n    async def __aenter__(self): ...\n    async def __aexit__(self, *exc): ...\n    async def health(self): ...\n"
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class Pooled:\n    async def __aenter__(self): ...\n    async def __aexit__(self, *exc): ...\n\n\nclass SerperWebDriver(Pooled):\n    async def health(self): ...\n"
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "from contextlib import AbstractAsyncContextManager\n\n\nclass SerperWebDriver(AbstractAsyncContextManager):\n    async def health(self): ...\n"
+    invalid:
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class SerperWebDriver:\n    async def __aenter__(self): ...\n    async def __aexit__(self, *exc): ...\n"
+      - path: src/pkg/providers/adapters/markdown/anytomd.py
+        code: "class Base:\n    async def health(self): ...\n\n\nclass AnytomdAdapter(Base): ...\n"
+
+- id: symbolon.port-protocol
+  message: "a port is a Protocol: it names Protocol among its own bases"
+  tags: {law: "9", set: SYMBOLON, principle: Expressive}
+  scope:
+    exclude: *reserved
+  severity: error
+  check: {engine: profile, kinds: [port], aspect: bases}
+  fix: {safety: none, reason: "turning a class into a Protocol changes who may implement it, which its implementers must follow"}
+  cases:
+    valid:
+      - path: src/pkg/ports/database.py
+        code: "from typing import Protocol\n\n\nclass DatabasePort(Protocol): ...\n"
+      - path: src/pkg/ports/database.py
+        code: "import typing\n\n\nclass Provider(typing.Protocol): ...\n\n\nclass DatabasePort(Provider, typing.Protocol): ...\n"
+      - path: src/pkg/ports/database.py
+        code: "from typing import Protocol, TypeVar\n\nT = TypeVar(\"T\")\n\n\nclass Provider(Protocol): ...\n\n\nclass DatabasePort(Provider, Protocol[T]): ...\n"
+    invalid:
+      - path: src/pkg/ports/database.py
+        code: "from typing import Protocol\n\n\nclass Provider(Protocol): ...\n\n\nclass DatabasePort(Provider): ...\n"
+      - path: src/pkg/ports/database.py
+        code: "class DatabasePort: ...\n"
+      - path: src/pkg/ports/database.py
+        code: "from abc import ABC\n\n\nclass DatabasePort(ABC): ...\n"
+
+- id: symbolon.no-finalizer
+  message: "no `__del__`: non-deterministic and not run at shutdown; a scope (`with`) owns the resource, `weakref.finalize` is the net"
+  tags: {law: "4", set: SYMBOLON, principle: Asynchronous}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: warning
+  check:
+    engine: pattern
+    rule:
+      kind: function_definition
+      has: {field: name, regex: '^__del__$'}
+      inside: {kind: class_definition, stopBy: {kind: function_definition}}
+  fix: {safety: none, reason: "the release moves into a context manager or a weakref.finalize that must not reference the object, a design the finalizer does not hold"}
+  cases:
+    valid:
+      - "class Handle:\n    def close(self) -> None: ...\n"
+      - "class Handle:\n    def __init__(self) -> None:\n        self._fin = weakref.finalize(self, release)\n"
+      - "def __del__() -> None: ...\n"
+    invalid:
+      - "class Handle:\n    def __del__(self) -> None:\n        self.close()\n"

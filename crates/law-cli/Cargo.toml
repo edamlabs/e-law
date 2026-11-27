@@ -1,0 +1,34 @@
+[package]
+name = "law-cli"
+description = "The law binary: the composition root that opens a project, runs its catalogues and writes the report"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+build = "src/build.rs"
+
+[dependencies]
+law-model.workspace = true
+law-config.workspace = true
+law-engine.workspace = true
+law-external.workspace = true
+law-fix.workspace = true
+law-report.workspace = true
+clap.workspace = true
+jiff.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "law"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+regex.workspace = true
+serde-saphyr.workspace = true
+jsonschema.workspace = true
+globset.workspace = true

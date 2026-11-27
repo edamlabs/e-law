@@ -1,0 +1,6 @@
+- id: ost.one-word-module
+  message: "a module name is one word"
+  check:
+    engine: tree
+    dirs: ["src/**"]
+  fix: {safety: safe}

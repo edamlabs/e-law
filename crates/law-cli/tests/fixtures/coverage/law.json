@@ -1,0 +1,83 @@
+{
+  "by": "law",
+  "rows": [
+    {
+      "value": "2",
+      "rules": 2,
+      "engines": {
+        "pattern": 2
+      },
+      "fixable": {
+        "safe": 1,
+        "unsafe": 0,
+        "none": 1
+      },
+      "untestable": 0
+    },
+    {
+      "value": "3",
+      "rules": 1,
+      "engines": {
+        "pattern": 1
+      },
+      "fixable": {
+        "safe": 0,
+        "unsafe": 0,
+        "none": 1
+      },
+      "untestable": 0
+    },
+    {
+      "value": "10",
+      "rules": 2,
+      "engines": {
+        "ruff": 1,
+        "tree": 1
+      },
+      "fixable": {
+        "safe": 0,
+        "unsafe": 1,
+        "none": 1
+      },
+      "untestable": 1
+    },
+    {
+      "value": "(untagged)",
+      "rules": 2,
+      "engines": {
+        "pattern": 1,
+        "ty": 1
+      },
+      "fixable": {
+        "safe": 0,
+        "unsafe": 0,
+        "none": 2
+      },
+      "untestable": 1
+    }
+  ],
+  "prose": [
+    {
+      "values": [
+        "2"
+      ],
+      "text": "no rule yet: pattern (membership in a list)"
+    },
+    {
+      "values": [
+        "6"
+      ],
+      "text": "surveying happens before the code exists"
+    },
+    {
+      "values": [
+        "10"
+      ],
+      "text": "no rule yet: graph (dead privates)"
+    },
+    {
+      "values": [],
+      "text": "carries no law at all"
+    }
+  ]
+}

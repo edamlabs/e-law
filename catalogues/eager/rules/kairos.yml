@@ -1,0 +1,92 @@
+- id: kairos.no-orphan-task
+  message: "no orphan tasks: a task belongs to a TaskGroup, or its reference is kept"
+  tags: {law: "14", set: KAIROS, principle: Asynchronous}
+  severity: error
+  check: {engine: ruff, code: RUF006}
+  fix: {safety: none, reason: "ruff offers no fix: which group owns the task is the author's"}
+  cases:
+    valid:
+      - "import asyncio\n\n\nasync def run() -> None:\n    async with asyncio.TaskGroup() as group:\n        group.create_task(run())\n"
+    invalid:
+      - "import asyncio\n\n\nasync def run() -> None:\n    asyncio.create_task(run())\n"
+
+- id: kairos.bounded-queue
+  message: "a queue is bounded: `Queue(maxsize=...)` is the backpressure, and an unbounded one grows under a slow consumer"
+  tags: {law: "14", set: KAIROS, principle: Asynchronous}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: call
+      has: {field: function, regex: '^((asyncio|queue)\.)?(Queue|LifoQueue|PriorityQueue)(\[.*\])?$'}
+      any:
+        - has: {field: arguments, regex: '^\(\s*\)$'}
+        - has: {field: arguments, regex: '^\(\s*(maxsize\s*=\s*)?(0|-\s*\d+)\s*,?\s*\)$'}
+  fix: {safety: none, reason: "the bound is the producer's pace: too small stalls it, too large hides the slow consumer, and only the author knows the flow"}
+  cases:
+    valid:
+      - "q: asyncio.Queue[Item] = asyncio.Queue(maxsize=100)"
+      - "q = Queue(100)"
+      - "q = asyncio.PriorityQueue(maxsize=size)"
+      - "q = asyncio.Queue[int](maxsize=100)"
+      - "q = asyncio.Queue(maxsize=n)"
+    invalid:
+      - "q = asyncio.Queue()"
+      - "q: Queue[Item] = Queue()"
+      - "q = asyncio.PriorityQueue()"
+      - "q = asyncio.Queue[int]()"
+      - "q = asyncio.Queue(maxsize=0)"
+      - "q = asyncio.Queue(0)"
+      - "q = asyncio.Queue(maxsize=-1)"
+
+- id: kairos.no-nested-wait-for
+  message: "never nest wait_for: one deadline over the whole block is `async with asyncio.timeout(...)`"
+  tags: {law: "14", set: KAIROS, principle: Asynchronous}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: call
+      has: {field: function, regex: '^(asyncio\.)?wait_for$'}
+      inside:
+        kind: call
+        has: {field: function, regex: '^(asyncio\.)?wait_for$'}
+        stopBy: end
+  fix: {safety: none, reason: "the inner and the outer deadline may differ, and which one the block keeps is the author's to say"}
+  cases:
+    valid:
+      - "async def run() -> None:\n    await asyncio.wait_for(fetch(), 5)\n"
+      - "async def run() -> None:\n    async with asyncio.timeout(5):\n        await fetch()\n"
+    invalid:
+      - "async def run() -> None:\n    await asyncio.wait_for(asyncio.wait_for(fetch(), 1), 5)\n"
+      - "async def run() -> None:\n    await wait_for(wait_for(fetch(), 1), 5)\n"
+
+- id: kairos.no-method-cache
+  message: "no @cache or @lru_cache on a method: it keys on self and the instance never dies; a module-level function of the fields, or cached_property"
+  tags: {law: "19", set: KAIROS, principle: Asynchronous}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: decorated_definition
+      inside: {kind: block, inside: {kind: class_definition}}
+      has: {kind: decorator, regex: '^@(functools\.)?(cache|lru_cache)\b'}
+      not:
+        has: {kind: decorator, regex: '^@(staticmethod|classmethod)\b'}
+  fix: {safety: none, reason: "which fields the value really reads, and so the pure function it becomes, is the author's to name"}
+  cases:
+    valid:
+      - "@cache\ndef load(path: str) -> bytes: ...\n"
+      - "class Store:\n    @cached_property\n    def size(self) -> int: ...\n"
+      - "class Store:\n    @staticmethod\n    @cache\n    def parse(text: str) -> int: ...\n"
+      - "class Store:\n    @classmethod\n    @cache\n    def hints(cls) -> tuple[str, ...]: ...\n"
+    invalid:
+      - "class Store:\n    @cache\n    def size(self) -> int: ...\n"
+      - "class Store:\n    @functools.lru_cache(maxsize=32)\n    def size(self) -> int: ...\n"
+      - "class Store:\n    @lru_cache\n    async def size(self) -> int: ...\n"

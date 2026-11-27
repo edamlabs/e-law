@@ -1,0 +1,18 @@
+- id: metron.no-pop-front
+  message: "pop(0) is O(n) on a list: a FIFO is a collections.deque and popleft"
+  tags: {law: "2", set: METRON, principle: Economical}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule: {pattern: "$L.pop(0)"}
+  fix: {safety: none, reason: "the deque replaces the list where it is built, and every other reader of the list changes with it"}
+  cases:
+    valid:
+      - "item = queue.popleft()"
+      - "item = stack.pop()"
+      - "item = batch.pop(index)"
+    invalid:
+      - "item = queue.pop(0)"
+      - "while queue:\n    node = queue.pop(0)\n"

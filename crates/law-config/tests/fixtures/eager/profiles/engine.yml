@@ -1,0 +1,2 @@
+- kind: engine
+  home: ["src/*/engines/*.py"]

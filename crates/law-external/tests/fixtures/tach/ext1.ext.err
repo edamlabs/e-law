@@ -1,0 +1,6 @@
+External Dependencies
+[FAIL] Error: External package 'httpx' is not used in package 'pkg'.
+[FAIL] src/pkg/core/model.py:1: Dependency 'requests' is not declared in package 'pkg'.
+
+Consider updating the corresponding pyproject.toml file,
+or add the dependencies to the 'external.exclude' list in tach.toml.

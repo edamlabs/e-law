@@ -1,0 +1,109 @@
+name = "eager"
+version = "0.1.0"
+description = "The EAGER law for Python: the house's taxonomy, diction, contracts, banks and natures, as rules"
+
+##### PROSE #####
+
+[[prose]]
+tags = {law = "1", set = "OST", principle = "Rooted"}
+text = "one word per concept per context: whether two names mean one concept is judgment no engine reads"
+
+[[prose]]
+tags = {law = "2", set = "METRON", principle = "Economical"}
+text = "no rule yet: pattern (membership tested in a list inside a loop); pop(0) on a list is checked (metron.no-pop-front)"
+
+[[prose]]
+tags = {law = "3", set = "LEXIS", principle = "Economical"}
+text = "where a stream must materialize is a boundary decision, said in its reason, never read off the tree"
+
+[[prose]]
+tags = {law = "4", set = "SYMBOLON", principle = "Asynchronous"}
+text = "whether every resource has a scope and cancellation is respected at run time needs the program running"
+
+[[prose]]
+tags = {law = "5", set = "LEXIS", principle = "Expressive"}
+text = "which level of the dispatch hierarchy fits a decision is design judgment; only the banned forms are checked"
+
+[[prose]]
+tags = {law = "6", set = "METRON", principle = "Economical"}
+text = "surveying the state of the art before code happens before the code exists: nothing in the tree records it"
+
+[[prose]]
+tags = {law = "7", set = "LEXIS", principle = "Expressive"}
+text = "whether an expression reads better than the statement it replaces is taste no engine measures"
+
+[[prose]]
+tags = {law = "8", set = "LEXIS", principle = "Expressive"}
+text = "which dunder or descriptor a behaviour belongs in is judgment over the object model, not a shape"
+
+[[prose]]
+tags = {law = "9", set = "SYMBOLON", principle = "Expressive"}
+text = "which pattern a piece of logic calls for, named before improvising, is design judgment, and which protocol of a ports module is the capability's port is not readable from its name; only ports as Protocols are checked"
+
+[[prose]]
+tags = {law = "10", set = "PHRONESIS", principle = "Economical"}
+text = "whether a module nothing imports is dead or a door no entry names is read, never inferred; dead privates and a seam with one implementation have no rule yet"
+
+[[prose]]
+tags = {law = "11", set = "ELENCHOS", principle = "Grounded"}
+text = "test-first order, modularity and a migration path are a way of working the finished tree does not show"
+
+[[prose]]
+tags = {law = "12", set = "METRON", principle = "Economical"}
+text = "the reach order is settled by a benchmark between rivals, a measure outside the tree"
+
+[[prose]]
+tags = {law = "13", set = "SYMBOLON", principle = "Grounded"}
+text = "whether a state is truly unrepresentable, or a Protocol the right contract, is a proof about the domain"
+
+[[prose]]
+tags = {law = "14", set = "KAIROS", principle = "Asynchronous"}
+text = "bounded fan-out and the absence of orphan tasks hold at run time; only their syntactic signs are checked (an unbounded queue, a nested wait_for), and a gather over many items is not one: whether a semaphore bounds it is dataflow"
+
+[[prose]]
+tags = {law = "15", set = "ALETHEIA", principle = "Grounded"}
+text = "reasoning in distributions, priors and updates is a habit of thought no syntax shows"
+
+[[prose]]
+tags = {law = "16", set = "BANKS", principle = "Expressive"}
+text = "whether a log event carries the right fields and config is read only at the root is a reading of intent"
+
+[[prose]]
+tags = {law = "17", principle = "Economical"}
+text = "noticing a task seen twice is memory of the work across sessions, never a property of one tree"
+
+[[prose]]
+tags = {law = "18", set = "LEXIS", principle = "Expressive"}
+text = "whether a construct is ceremony the language already dissolves is judgment; only an ABC where a port's Protocol fits is checked"
+
+[[prose]]
+tags = {law = "19", set = "KAIROS", principle = "Asynchronous"}
+text = "whether a cache belongs in the process or in a plane below is a judgment of the system; only @cache and @lru_cache on a method, which pin the instance, are checked"
+
+[[prose]]
+tags = {law = "20", set = "KAIROS", principle = "Asynchronous"}
+text = "no rule yet: graph (a producer importing its consumer)"
+
+[[prose]]
+tags = {law = "21", set = "KANON", principle = "Grounded"}
+text = "turning every checkable law into a gate is the meta-law this catalogue serves; it judges no file"
+
+[[prose]]
+tags = {law = "22", set = "OST", principle = "Rooted"}
+text = "that each typed branch names only modules that exist beside it is read statically (ost.state-mirrors-tree); that one object is held at one path, that no node sits outside the package its path names and that the root is sealed need the program running; a module with no attribute is no finding, for a module is no singleton by being there"
+
+[[prose]]
+tags = {law = "23", set = "NATURES", principle = "Rooted"}
+text = "which nature a module is, and whether it copies to another project untouched, is a judgment of its role; only where an entity sits, its name, its lifecycle, its spec and the cycles of its imports are checked"
+
+[[prose]]
+tags = {law = "24", set = "METRON", principle = "Grounded"}
+text = "no rule yet: metric (a fenced benchmark behind every dependency)"
+
+[[prose]]
+tags = {law = "25", set = "ERGON", principle = "Grounded"}
+text = "no rule yet: prek and tree (no hand-written changelog, the branch's fragment present)"
+
+[[prose]]
+tags = {law = "26", set = "BANKS", principle = "Expressive"}
+text = "whether a literal means something is semantic; only literals of known shapes are caught inline"

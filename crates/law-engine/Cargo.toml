@@ -1,0 +1,28 @@
+[package]
+name = "law-engine"
+description = "The native engines of e-law and the run that plans, checks and licenses them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+law-model.workspace = true
+law-config.workspace = true
+law-fix.workspace = true
+ast-grep-config.workspace = true
+ast-grep-core.workspace = true
+ast-grep-language.workspace = true
+globset.workspace = true
+ignore.workspace = true
+jiff.workspace = true
+petgraph.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

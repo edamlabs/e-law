@@ -1,0 +1,16 @@
+- id: lexis.elif
+  message: "elif is a decision table nobody wrote down"
+  tags: {law: "5", set: LEXIS, principle: dispatch}
+  scope:
+    include: ["src/**/*.py"]
+    exclude: ["**/ops/**"]
+    kind: engine
+  severity: error
+  check:
+    engine: pattern
+    rule: {kind: elif_clause}
+  fix: {safety: none, reason: "the table has to be designed"}
+  cases:
+    valid:   [{code: "x = a if c else b\n"}]
+    invalid: [{path: "src/pkg/logic/x.py", code: "if a:\n  pass\nelif b:\n  pass\n"}]
+    fixed:   []

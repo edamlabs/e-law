@@ -1,0 +1,304 @@
+- id: natures.logic-ports-only
+  formerly: [logic-ports-only]
+  message: "the logic meets the world through ports: never an engine, a driver or an adapter (tach's layer allows the import; this gate does not)"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    include: ["src/*/logic/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - kind: import_from_statement
+          has: {field: module_name, regex: '^\w+\.(engines|providers\.(drivers|adapters))(\.|$)'}
+        - kind: import_from_statement
+          regex: '^from \w+(\.providers)? import .*\b(engines|drivers|adapters)\b'
+        - kind: import_statement
+          regex: '^import \w+\.(engines|providers\.(drivers|adapters))\b'
+  fix: {safety: none, reason: "the port the logic should take may not exist, and the concretion has to be handed in at the root"}
+  cases:
+    valid:
+      - "from pkg.ports.issue import IssuePort"
+      - "from pkg.ports.database import DatabasePort"
+      - "from pkg.providers.state import ProvidersState"
+      - "from pkg import models"
+    invalid:
+      - "from pkg.engines.lock import LockEngine"
+      - "from pkg.providers.drivers.database.psycopg import PsycopgDatabaseDriver"
+      - "from pkg.providers.adapters.agui.stream import AGUIStreamAdapter"
+      - "import pkg.engines.lock"
+      - "from pkg import engines"
+      - "from pkg.providers import drivers"
+
+- id: natures.context-edge
+  message: "asgi-correlation-id is the HTTP edge's adapter: only infra/context and api/middlewares/correlation import it; the rest reads the turn from infra/context"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    include: ["src/**/*.py"]
+    exclude: ["src/*/infra/context.py", "src/*/api/middlewares/correlation.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - kind: import_statement
+          regex: '^import asgi_correlation_id\b'
+        - kind: import_from_statement
+          has: {field: module_name, regex: '^asgi_correlation_id(\.|$)'}
+  fix: {safety: none, reason: "what the reader needs from the turn has to exist on infra/context before the import can go"}
+  cases:
+    valid:
+      - "from pkg.infra.context import TurnContext"
+    invalid:
+      - "from asgi_correlation_id import correlation_id"
+      - "from asgi_correlation_id.middleware import CorrelationIdMiddleware"
+      - "import asgi_correlation_id"
+
+- id: natures.declared-dependency
+  message: "a module imports only the modules its tach.toml entry names in depends_on"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: UndeclaredDependency}
+  fix: {safety: none, reason: "whether the dependency is declared or the import moves is a design decision on the layer map"}
+
+- id: natures.layer-order
+  message: "layers look only down: a module never imports a module of a higher layer"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: LayerViolation}
+  fix: {safety: none, reason: "the code that reaches up has to move down, or what it reaches has to be handed in from above"}
+
+- id: natures.no-forbidden-dependency
+  message: "a module never imports what its tach.toml entry forbids in cannot_depend_on"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: ForbiddenDependency}
+  fix: {safety: none, reason: "the forbidden import has to be replaced by the port or the module the boundary allows"}
+
+- id: natures.no-cycle
+  message: "the modules' dependencies form no cycle"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    include: ["tach.toml"]
+  severity: error
+  check: {engine: tach, code: CircularDependency}
+  fix: {safety: none, reason: "which edge of the cycle goes is a layout decision: a cycle is a layout bug"}
+
+- id: natures.visible-dependency
+  message: "a module depends only on modules whose visibility admits it"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    include: ["tach.toml"]
+  severity: error
+  check: {engine: tach, code: Visibility}
+  fix: {safety: none, reason: "widening a module's visibility or dropping the dependency is a decision on the boundary"}
+
+- id: natures.public-interface
+  message: "a module imports another only through what that module's interface exposes"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: PrivateDependency}
+  fix: {safety: none, reason: "the name either joins the interface or the import goes through one it already exposes"}
+
+- id: natures.used-ignore
+  message: "a tach-ignore ignores an import tach would otherwise refuse"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: UnusedIgnoreDirective}
+  fix: {safety: none, reason: "tach reports the directive, not its span inside the comment, so its removal is left to the hand"}
+
+- id: natures.ignore-reason
+  message: "a tach-ignore says why, between parentheses"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: MissingIgnoreDirectiveReason}
+  fix: {safety: none, reason: "the reason is a judgment only its author can write"}
+
+- id: natures.declared-external
+  message: "a third-party package is imported only when its pyproject.toml declares it"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: UndeclaredExternalDependency}
+  fix: {safety: none, reason: "declaring the package pins a version and a dependency only its owner chooses"}
+
+- id: natures.no-unused-external
+  message: "every third-party package pyproject.toml declares is imported"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    include: ["tach.toml"]
+  severity: error
+  check: {engine: tach, code: UnusedExternalDependency}
+  fix: {safety: none, reason: "a package imported only at run time, a plugin or a CLI, is unused to tach and needed all the same"}
+
+- id: natures.declared-module-external
+  message: "a module imports a third-party package only when its tach.toml entry names it in depends_on_external"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: ModuleUndeclaredExternalDependency}
+  fix: {safety: none, reason: "whether the module may meet that package is a decision on its nature"}
+
+- id: natures.no-forbidden-external
+  message: "a module never imports a third-party package its tach.toml entry forbids in cannot_depend_on_external"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check: {engine: tach, code: ModuleForbiddenExternalDependency}
+  fix: {safety: none, reason: "the package has to be reached through the provider that owns it"}
+
+- id: natures.provider-present
+  message: "a provider's module, providers/<nature>/<capability>/<name>.py, holds its provider: a class ending in its nature"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    exclude: &reserved ["**/__init__.py", "**/models.py", "**/enums.py", "**/state.py", "**/nodes/**"]
+  severity: error
+  check: {engine: profile, kinds: [driver, adapter], aspect: present}
+  fix: {safety: none, reason: "a module with no provider is moved or merged, and only its author knows where it belongs"}
+  cases:
+    valid:
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class SerperWebDriver: ...\n"
+      - path: src/pkg/providers/adapters/markdown/anytomd.py
+        code: "class Hint: ...\n\n\nclass AnytomdAdapter: ...\n"
+      - path: src/pkg/providers/drivers/web/models.py
+        code: "class Hit: ...\n"
+    invalid:
+      - path: src/pkg/providers/drivers/http/auth.py
+        code: "class KeyAuth: ...\n"
+      - path: src/pkg/providers/adapters/markdown/anytomd.py
+        code: "class AnytomdDriver: ...\n"
+
+- id: natures.provider-surname
+  message: "every class of a provider's module ends in its nature, Driver under drivers/, Adapter under adapters/: a class beside an entity carries its surname, or lives in models.py"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    exclude: *reserved
+  severity: warning
+  check: {engine: profile, kinds: [driver, adapter], aspect: surname}
+  fix: {safety: none, reason: "a rename rewrites every importer, and a class that is no provider belongs in another module"}
+  cases:
+    valid:
+      - path: src/pkg/providers/drivers/database/psqlpy.py
+        code: "class PsqlpyDriver: ...\n\n\nclass PooledPsqlpyDriver(PsqlpyDriver): ...\n"
+      - path: src/pkg/providers/drivers/database/models.py
+        code: "class Row: ...\n"
+    invalid:
+      - path: src/pkg/providers/drivers/database/psqlpy.py
+        code: "class PsqlpyDriver: ...\n\n\nclass Row: ...\n"
+      - path: src/pkg/providers/adapters/markdown/anytomd.py
+        code: "class AnytomdDriver: ...\n"
+
+- id: natures.provider-spec
+  message: "a provider declares its ProviderSpec: `spec` bound in its class body, its own or inherited"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    exclude: *reserved
+  severity: error
+  check: {engine: profile, kinds: [driver, adapter], aspect: attributes}
+  fix: {safety: none, reason: "where the work happens, what it consumes and how it runs are the provider's to declare"}
+  cases:
+    valid:
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class SerperWebDriver:\n    spec: ClassVar[ProviderSpec] = ProviderSpec(name=\"serper\")\n"
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class HTTPDriver:\n    spec = ProviderSpec(name=\"http\")\n\n\nclass SerperWebDriver(HTTPDriver): ...\n"
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class HTTPDriver:\n    spec = ProviderSpec(name=\"http\")\n\n\nclass JSONDriver(HTTPDriver): ...\n\n\nclass SerperWebDriver(JSONDriver): ...\n"
+      - path: src/pkg/providers/drivers/chat/tiered.py
+        code: "import abc\n\n\nclass TieredChatDriver(abc.ABC):\n    spec: ClassVar[ProviderSpec]\n\n    @abc.abstractmethod\n    async def run(self, prompt: str) -> str: ...\n"
+      - path: src/pkg/providers/drivers/chat/tiered.py
+        code: "from abc import ABC, abstractmethod\n\n\nclass TieredChatDriver(ABC):\n    spec: ClassVar[ProviderSpec]\n\n    @abstractmethod\n    async def run(self, prompt: str) -> str: ...\n\n\nclass OllamaChatDriver(TieredChatDriver):\n    spec = ProviderSpec(name=\"ollama\")\n\n    async def run(self, prompt: str) -> str: ...\n"
+      - path: src/pkg/providers/drivers/web/http.py
+        code: "from abc import ABC\n\n\nclass HTTPDriver(ABC):\n    spec: ClassVar[ProviderSpec]\n"
+    invalid:
+      - path: src/pkg/providers/drivers/web/serper.py
+        code: "class SerperWebDriver: ...\n"
+      - path: src/pkg/providers/adapters/markdown/anytomd.py
+        code: "class AnytomdAdapter:\n    spec: ClassVar[ProviderSpec]\n"
+      - path: src/pkg/providers/drivers/chat/tiered.py
+        code: "from abc import ABC, abstractmethod\n\n\nclass TieredChatDriver(ABC):\n    spec: ClassVar[ProviderSpec]\n\n    @abstractmethod\n    async def run(self, prompt: str) -> str: ...\n\n\nclass OllamaChatDriver(TieredChatDriver):\n    async def run(self, prompt: str) -> str: ...\n"
+
+- id: natures.engine-present
+  message: "an engine's or a processor's module holds it: a class ending in Engine under engines/, in Processor under processors/"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    exclude: *reserved
+  severity: error
+  check: {engine: profile, kinds: [engine, processor], aspect: present}
+  fix: {safety: none, reason: "a module with no engine or processor is moved or merged, and only its author knows where it belongs"}
+  cases:
+    valid:
+      - path: src/pkg/engines/cache.py
+        code: "class CacheEngine: ...\n"
+      - path: src/pkg/processors/ingest/graph.py
+        code: "class IngestStep: ...\n\n\nclass IngestProcessor: ...\n"
+      - path: src/pkg/processors/ingest/models.py
+        code: "class IngestResult: ...\n"
+      - path: src/pkg/engines/state.py
+        code: "class EnginesState: ...\n"
+    invalid:
+      - path: src/pkg/engines/agents/summary.py
+        code: "class SummaryAgent: ...\n"
+      - path: src/pkg/processors/doc.py
+        code: "class DocEngine: ...\n"
+
+- id: natures.engine-surname
+  message: "every class of an engine's or a processor's module ends in its nature, Engine under engines/, Processor under processors/: a class beside an entity carries its surname, or lives in models.py"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  scope:
+    exclude: *reserved
+  severity: warning
+  check: {engine: profile, kinds: [engine, processor], aspect: surname}
+  fix: {safety: none, reason: "a rename rewrites every importer, and a value type belongs in the package's models.py"}
+  cases:
+    valid:
+      - path: src/pkg/engines/cache.py
+        code: "class CacheEngine: ...\n\n\nclass TieredCacheEngine(CacheEngine): ...\n"
+      - path: src/pkg/processors/scan/models.py
+        code: "class ScanResult: ...\n"
+      - path: src/pkg/processors/scan/nodes/read.py
+        code: "class ReadNode: ...\n"
+    invalid:
+      - path: src/pkg/engines/command/search.py
+        code: "class SearchResult: ...\n\n\nclass SearchEngine: ...\n"
+      - path: src/pkg/processors/mask.py
+        code: "class MaskEngine: ...\n"
+
+- id: natures.no-import-cycle
+  message: "modules import one another round: layers look only down, and a cycle is a layout bug fixed in the tree, never an import hidden in a function"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: error
+  check:
+    engine: graph
+    aspect: cycle
+  fix: {safety: none, reason: "breaking a cycle moves code between modules: which one yields is a design decision"}
+  cases:
+    valid:
+      - files:
+          src/pkg/a.py: "from pkg import b\n"
+          src/pkg/b.py: "import pkg.c\n"
+          src/pkg/c.py: "x = 1\n"
+      - files:
+          src/pkg/a.py: "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    from pkg.b import B\n"
+          src/pkg/b.py: "from pkg.a import A\n"
+    invalid:
+      - files:
+          src/pkg/a.py: "from pkg import b\n"
+          src/pkg/b.py: "from pkg.a import A\n"
+      - files:
+          src/pkg/a.py: "import pkg.b\n"
+          src/pkg/b.py: "from pkg.c import C\n"
+          src/pkg/c.py: "def run() -> None:\n    from pkg import a\n"
+      - files:
+          src/pkg/m/a.py: "from . import b\n"
+          src/pkg/m/b.py: "from ..m.a import A\n"
+      - files:
+          src/pkg/a.py: "import pkg.a\n"
+
+- id: natures.provider-layout
+  message: "a provider lives at providers/<drivers|adapters>/<capability>/<name>.py: the folder is the capability, the file the implementation"
+  tags: {law: "23", set: NATURES, principle: Rooted}
+  severity: warning
+  check:
+    engine: tree
+    dirs: ["src/*/providers/drivers", "src/*/providers/adapters"]
+    allow: ["*/"]
+  fix: {safety: none, reason: "the capability is the module of the port the provider meets, and which port that is, is the author's to say"}

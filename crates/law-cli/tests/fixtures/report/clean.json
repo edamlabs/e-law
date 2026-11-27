@@ -1,0 +1,27 @@
+{
+  "run": {
+    "tool": "0.1.0",
+    "date": "2026-01-02T03:04:05Z",
+    "catalogues": [
+      {
+        "name": "t",
+        "version": "1",
+        "digest": "sha256:cc545f3eb5d541e28d9262465698fe799e2fc33c88ac6472305b53092e6d2c8b"
+      }
+    ],
+    "select": [
+      "ALL"
+    ],
+    "ignore": [],
+    "paths": [
+      "pk"
+    ]
+  },
+  "findings": [],
+  "summary": {
+    "total": 0,
+    "by_severity": {},
+    "by_tag": {},
+    "by_rule": {}
+  }
+}

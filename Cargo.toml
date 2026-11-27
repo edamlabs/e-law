@@ -1,0 +1,57 @@
+##### WORKSPACE #####
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/edamlabs/e-law"
+rust-version = "1.94.0"
+
+[workspace.dependencies]
+law-model = { path = "crates/law-model", version = "0.1.0" }
+law-config = { path = "crates/law-config", version = "0.1.0" }
+law-engine = { path = "crates/law-engine", version = "0.1.0" }
+law-external = { path = "crates/law-external", version = "0.1.0" }
+law-fix = { path = "crates/law-fix", version = "0.1.0" }
+law-report = { path = "crates/law-report", version = "0.1.0" }
+ast-grep-config = "=0.51.3"
+ast-grep-core = "=0.51.3"
+ast-grep-language = { version = "=0.51.3", default-features = false, features = ["tree-sitter-python"] }
+clap = { version = "4.6.10", features = ["derive"] }
+globset = "0.4.22"
+ignore = "0.4.35"
+jsonschema = { version = "0.63.2", default-features = false }
+jiff = { version = "1.0.3", features = ["serde"] }
+petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
+rayon = "1.12.0"
+regex = "1.13.2"
+schemars = "1.2.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.2.0"
+serde_json = "1.0.154"
+sha2 = "0.11.2"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+toml = "1.2.3"
+
+##### LINTS #####
+[workspace.lints.rust]
+unsafe_code = "forbid"
+warnings = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+
+##### PROFILES #####
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"

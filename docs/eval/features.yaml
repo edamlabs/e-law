@@ -1,0 +1,71 @@
+# Every feature e-law gained, one behaviour an entry: the matrix its end-to-end tests are written from.
+# Declarations only. `since`: an e-law PR (#n) or unknown. `plan`: the step of the plan that delivered it.
+
+features:
+
+  ##### PACKAGING #####
+
+  - id: pack.wheel-brings-the-chain
+    title: "installing e-law brings ruff, ty, tach and prek, and law finds them beside itself"
+    description: >-
+      `uv pip install e-law` into a fresh environment puts `law`, `ruff`, `ty`, `tach` and `prek` in its `bin/`.
+      With `PATH` reduced to `/usr/bin:/bin`, `law check` still runs a ruff rule and a tach rule; the same through the
+      symlink `uv tool install` exposes. A lone `law` binary with no tool near exits 2 naming the missing tool.
+      Proven by `tests/pack/02_venv.sh`, `03_scrubbed.sh`, `04_tool.sh`.
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#11
+
+  - id: pack.sdist-builds
+    title: "the sdist builds the same wheel, its catalogue embedded"
+    description: >-
+      `maturin sdist`, unpacked in a clean directory, builds a wheel whose `law --version` answers and whose built-in
+      `eager` catalogue has the digest of `catalogues/eager` on disk. Proven by `tests/pack/05_sdist.sh`,
+      `06_catalogue.sh`.
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#11
+
+  - id: pack.python-module
+    title: "python -m e_law runs the binary"
+    description: >-
+      `python -m e_law --version` prints `law <version>`; with no binary in any known place it names every place
+      tried and exits non-zero. Proven by `tests/pack/02_venv.sh`, `07_missing.sh`.
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#11
+
+  ##### CATALOGUE #####
+
+  - id: eager.ported-gates
+    title: "the rules of the Python gates run in e-law with the same verdicts"
+    description: >-
+      The 39 pattern and tree rules of the Python `gates/` (e-arkhetypo common's, and a private project's) live in
+      `catalogues/eager`,
+      renamed, tagged `law`, `set`, `principle`; `law test --catalogue eager` proves each on its own valid and invalid
+      cases. On a private corpus the whole tree gives the Python's verdict (a local-only suite, not in this repository).
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#14
+
+  - id: eager.static-genealogy
+    title: "a private method serves a public, judged without importing the program"
+    description: >-
+      `ost.private-lineage` and `ost.privates-first` read each class statically, resolving its bases through the
+      project, its environment and the builtins bank: an orphan private or a private after a public is a finding,
+      whatever decorator wraps the method at runtime (`crates/law-cli/tests/{members,stdlib}.rs`).
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#14
+
+  ##### COVERAGE #####
+
+  - id: coverage.by-tag
+    title: "law coverage says how much of a law is gated and what stays prose"
+    description: >-
+      `law coverage --by law` lists, per value of the tag, the rules, their engines, how many have a safe or unsafe
+      fix and how many cannot be tested, then the catalogue's own `[[prose]]` entries: what no engine checks and why.
+      Its counts equal `law rule` grouped by hand (`crates/law-cli/tests/coverage.rs`).
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#15

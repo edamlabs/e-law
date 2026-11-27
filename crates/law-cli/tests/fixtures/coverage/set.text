@@ -1,0 +1,10 @@
+set         rules  engines                          fixable (safe/unsafe/none)  untestable
+A           2      pattern 1, ruff 1                1/1/0                       0
+B           4      pattern 1, ruff 1, tree 1, ty 1  0/1/3                       2
+(untagged)  2      pattern 2                        0/0/2                       0
+
+Stays prose:
+  set A: surveying happens before the code exists
+  set B: no rule yet: pattern (membership in a list)
+  (untagged): no rule yet: graph (dead privates)
+  (untagged): carries no law at all

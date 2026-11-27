@@ -1,0 +1,25 @@
+- kind: driver
+  home: ["src/*/providers/drivers/*/*.py"]
+  suffix: Driver
+  methods: [__aenter__, __aexit__, health]
+  attributes: [spec]
+
+- kind: adapter
+  home: ["src/*/providers/adapters/*/*.py"]
+  suffix: Adapter
+  methods: [__aenter__, __aexit__, health]
+  attributes: [spec]
+
+- kind: engine
+  home: ["src/*/engines/**/*.py"]
+  suffix: Engine
+
+- kind: processor
+  home: ["src/*/processors/**/*.py"]
+  suffix: Processor
+
+- kind: port
+  home: ["src/*/ports/*.py"]
+  suffix: Port
+  bases: [typing.Protocol, typing_extensions.Protocol]
+  never: [abc.ABC]

@@ -1,0 +1,449 @@
+- id: ost.comment-form
+  formerly: [comment-form]
+  message: "comments are banned: only `##### SECTION #####`, a bare `#` rule, `### One-line reason.` and tool directives"
+  tags: {law: "1", set: OST, principle: Rooted}
+  scope:
+    include: ["**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: comment
+      not:
+        regex: '^(#+|#{5} .+ #{5}|### \S.*|#!.*|# ?(noqa|type: ?ignore|ty: ?ignore|fmt: ?(skip|off|on)|nosec|nosemgrep|ast-grep-ignore|pragma)\b.*)$'
+  fix: {safety: none, reason: "a chatty comment is either deleted or rewritten as a reason, and only its author knows which"}
+  cases:
+    valid:
+      - "##### PUBLIC #####"
+      - "#"
+      - "### The bucket stores raw frames."
+      - "x = 1  # noqa: E501 — the URL"
+      - "x = (1, 2)  # fmt: skip"
+      - "x = 1  # pragma: no cover"
+      - "x = 1  # pragma: allowlist secret"
+    invalid:
+      - "# a chatty comment"
+      - "x = 1  # explains the obvious"
+      - "## half a section"
+
+- id: ost.logic-in-class
+  formerly: [module-function]
+  message: "logic lives in its class: a module-level function exists only in ops/, operational/ or as a dispatch handler"
+  tags: {law: "1", set: OST, principle: Rooted}
+  scope:
+    include: ["src/**/*.py"]
+    exclude: ["**/ops/**", "**/operational/**"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: function_definition
+      any:
+        - inside: {kind: module}
+        - inside:
+            kind: decorated_definition
+            inside: {kind: module}
+            not:
+              has: {kind: decorator, regex: '^@(ovld|dispatch|singledispatch|\w+\.register)\b'}
+  fix: {safety: none, reason: "which class owns the function, or which ops/ category it belongs to, is a design decision"}
+  cases:
+    valid:
+      - "class A:\n    def run(self): ...\n"
+      - "@ovld\ndef render(node: Text) -> str: ...\n"
+      - "@render.register\ndef text(node: Text) -> str: ...\n"
+    invalid:
+      - "def helper(): ..."
+      - "async def fetch(): ..."
+      - "@cache\ndef helper(): ...\n"
+
+- id: ost.no-loose-private
+  formerly: [private-function]
+  message: "no loose private helpers: a module-level function is public, or it is a private method of its class"
+  tags: {law: "1", set: OST, principle: Rooted}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: function_definition
+      has: {field: name, regex: '^_'}
+      any:
+        - inside: {kind: module}
+        - inside: {kind: decorated_definition, inside: {kind: module}}
+  fix: {safety: none, reason: "the helper moves into the class whose public it serves, and only the call graph and its author can name that class"}
+  cases:
+    valid:
+      - "def text_clean(): ..."
+      - "class A:\n    def _run_fetch(self): ...\n"
+    invalid:
+      - "def _helper(): ..."
+      - "@cache\ndef _helper(): ...\n"
+
+- id: ost.constant-case
+  formerly: [constant-case]
+  message: "a module-level constant (a literal, or anything Final) is named in CAPITALS"
+  tags: {law: "1", set: OST, principle: Rooted}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: assignment
+      inside: {kind: expression_statement, inside: {kind: module}}
+      all:
+        - any:
+            - has: {field: type, kind: type, regex: 'Final'}
+            - has: {field: right, any: [{kind: integer}, {kind: float}, {kind: string}, {kind: concatenated_string}, {kind: 'true'}, {kind: 'false'}, {kind: tuple}, {kind: unary_operator}, {kind: expression_list, not: {has: {any: [{kind: call}, {kind: identifier}, {kind: attribute}]}}}, {kind: call, has: {field: function, regex: '^(frozenset|MappingProxyType)$'}}]}
+        - has:
+            field: left
+            any:
+              - {kind: identifier, not: {regex: '^(__\w+__|[A-Z][A-Z0-9_]*)$'}}
+              - {has: {kind: identifier, not: {regex: '^(__\w+__|[A-Z][A-Z0-9_]*)$'}}}
+  fix: {safety: none, reason: "renaming the constant rewrites every reader of it, across modules a single-file edit cannot see"}
+  cases:
+    valid:
+      - "LIMIT: Final = 30"
+      - "MORNING, NIGHT = 6, 21"
+      - "settings = Settings()"
+      - "first, second = make(), make()"
+      - "setup = ELogger.setup"
+      - "ELogger = beartype(ELogger)"
+    invalid:
+      - "limit = 30"
+      - "label: Final = Text.GREETING"
+      - "morning, NIGHT = 6, 21"
+      - "names = frozenset({'a'})"
+
+- id: ost.imports-at-top
+  message: "imports sit at the top: never `# noqa: E402`"
+  tags: {law: "1", set: OST, principle: Rooted}
+  scope:
+    include: ["src/**/*.py", "tests/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: comment
+      regex: '^#\s*noqa:.*\bE402\b'
+  fix: {safety: none, reason: "the late import is there to dodge an order or a cycle, and removing the pragma alone only moves the failure"}
+  cases:
+    valid:
+      - "x = 1  # noqa: E501 — the URL"
+    invalid:
+      - "from a import b  # noqa: E402"
+      - "import a  # noqa: F401, E402"
+
+- id: ost.no-mutable-global
+  formerly: [mutable-global]
+  message: "no mutable module state: a frozen value (tuple, frozenset, MappingProxyType) or a branch of the state tree"
+  tags: {law: "22", set: OST, principle: Rooted}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: assignment
+      inside: {kind: expression_statement, inside: {kind: module}}
+      has:
+        field: right
+        any:
+          - {kind: list}
+          - {kind: dictionary}
+          - {kind: set}
+          - {kind: list_comprehension}
+          - {kind: dictionary_comprehension}
+          - {kind: set_comprehension}
+          - {kind: call, has: {field: function, regex: '^(list|dict|set|defaultdict|deque|Counter|OrderedDict)$'}}
+      not:
+        has: {field: left, regex: '^__\w+__$'}
+  fix: {safety: none, reason: "freezing breaks any writer of the global, and a written one has to become a branch of the state tree"}
+  cases:
+    valid:
+      - "NAMES = frozenset({'a'})"
+      - "TABLE = MappingProxyType({'a': 1})"
+      - "__all__ = ['a']"
+    invalid:
+      - "CACHE = {}"
+      - "seen = set()"
+      - "ITEMS: list[str] = []"
+
+- id: ost.logic-root
+  formerly: [logic-root]
+  message: "logic/ holds the business, one directory per category, and the note of what it is for"
+  tags: {law: "22", set: OST, principle: Rooted}
+  severity: error
+  check:
+    engine: tree
+    dirs: ["src/*/logic"]
+    allow: ["README.md", "*/"]
+  fix: {safety: none, reason: "a loose module in logic/ belongs to a category nobody has named yet"}
+
+- id: ost.single-word-module
+  message: "a module or package is one word: an underscore in a name is a folder that was not created"
+  tags: {law: "1", set: OST, principle: Rooted}
+  severity: error
+  check:
+    engine: tree
+    dirs: ["src/*", "src/*/**", "tests/{unit,integration,evaluation,acceptance,benchmark}/*", "tests/{unit,integration,evaluation,acceptance,benchmark}/*/**"]
+    only: ["*.py", "*/"]
+    name: '__\w+__(\.py)?|test_\w+\.py|[^_]+'
+  fix: {safety: none, reason: "the qualifier becomes a folder or goes when the folder already says it, and every import of the module is rewritten with it"}
+
+- id: ost.no-init
+  message: "no `__init__.py`: the tree is a namespace package, a folder is a package by its path"
+  tags: {law: "1", set: OST, principle: Rooted}
+  severity: error
+  check:
+    engine: tree
+    dirs: ["src", "src/**", "tests", "tests/**"]
+    deny: ["__init__.py"]
+  fix: {safety: none, reason: "deleting it is safe only when no tool needs it, and the doctrine's three exceptions are a tool's, registered as an exception with that tool named"}
+
+- id: ost.folder-vocabulary
+  message: "folders come from the lexicon: `core/` and `common/` are `infra/`, `backends/`, `clients/` and `gateways/` are `providers/`, and `utils.py` and `helpers.py` do not exist"
+  tags: {law: "1", set: OST, principle: Rooted}
+  severity: error
+  check:
+    engine: tree
+    dirs: ["src", "src/**"]
+    deny: ["core/", "common/", "backends/", "clients/", "gateways/", "utils.py", "helpers.py"]
+  fix: {safety: none, reason: "what the folder held is infra, a provider or a class of its own, and only its author knows which"}
+
+- id: ost.no-toplevel-adapters
+  message: "no top-level `adapters/`: directly under the package it is `providers/adapters/`"
+  tags: {law: "1", set: OST, principle: Rooted}
+  severity: error
+  check:
+    engine: tree
+    dirs: ["src/*"]
+    deny: ["adapters/"]
+  fix: {safety: none, reason: "the folder moves under providers/ and every import of it is rewritten with it"}
+
+- id: ost.no-relative-import
+  message: "imports are absolute, spelled in full from the root: never `from .`"
+  tags: {law: "1", set: OST, principle: Rooted}
+  severity: error
+  check: {engine: ruff, code: TID252}
+  fix: {safety: none, reason: "ruff rewrites a relative import only inside a regular package, which the namespace tree never is, and only unsafely"}
+  cases:
+    valid:
+      - "from pkg.sibling import thing\n"
+    invalid:
+      - "from ..parent import thing\n"
+
+- id: ost.module-level-import
+  message: "imports sit at module level: one inside a function hides a cycle, and the cycle is the bug"
+  tags: {law: "1", set: OST, principle: Rooted}
+  severity: error
+  check: {engine: ruff, code: PLC0415}
+  fix: {safety: none, reason: "ruff offers no fix: the import moves to the top only once the cycle it dodged is broken"}
+  cases:
+    valid:
+      - "import json\n\n\ndef load(text: str) -> object:\n    return json.loads(text)\n"
+    invalid:
+      - "def load(text: str) -> object:\n    import json\n\n    return json.loads(text)\n"
+
+- id: ost.no-global-stmt
+  message: "no `global`: module state is a branch of the state tree, never rebound from a function"
+  tags: {law: "22", set: OST, principle: Rooted}
+  severity: error
+  check: {engine: ruff, code: PLW0603}
+  fix: {safety: none, reason: "ruff offers no fix: the rebound name has to become a branch of the state tree"}
+  cases:
+    valid:
+      - "def bump(count: int) -> int:\n    return count + 1\n"
+    invalid:
+      - "COUNT = 0\n\n\ndef bump() -> None:\n    global COUNT\n    COUNT += 1\n"
+
+- id: ost.private-lineage
+  formerly: [private-genealogy]
+  message: "a private method is `_<public>_<what>` or `_common_<what>`: it names the public it serves"
+  tags: {law: "1", set: OST, principle: Rooted}
+  scope:
+    include: ["src/**/*.py"]
+  severity: error
+  check:
+    engine: members
+    lineage: {common: [common]}
+    hooks: [field_validator, model_validator, field_serializer, model_serializer, computed_field, validator, root_validator]
+  fix: {safety: none, reason: "which public a private serves is the author's to name, and the rename rewrites every caller"}
+  cases:
+    valid:
+      - |
+        class Framework:
+            def run(self): ...
+
+
+        class Kept(Framework):
+            def _run_fetch(self): ...
+            def _enter_pool(self): ...
+            def _common_log(self): ...
+            async def __aenter__(self): ...
+      - |
+        class Registered:
+            def _init_subclass_register(cls): ...
+            def __init_subclass__(cls): ...
+      - |
+        class Root:
+            def run(self): ...
+
+
+        class Middle(Root): ...
+
+
+        class Leaf(Middle):
+            def _run_fetch(self): ...
+      - |
+        class Cache:
+            @property
+            def _size_raw(self): ...
+            @staticmethod
+            async def _common_clock(): ...
+            def __run_fetch(self): ...
+            @property
+            def size(self): ...
+            def run(self): ...
+      - |
+        class Base:
+            def run(self): ...
+
+
+        class Checked(Base):
+            @field_validator("name")
+            def _name_strip(cls, value): ...
+      - |
+        from enum import StrEnum
+
+
+        class Wear(StrEnum):
+            ONE = "one"
+
+            def _holds_search(self): ...
+            def holds(self): ...
+      - |
+        from pydantic import BaseModel
+
+
+        class Model(BaseModel):
+            def _unjudged(self): ...
+      - "class Empty:\n    size: int = 1\n"
+    invalid:
+      - |
+        class Kept:
+            def _orphan(self): ...
+            def run(self): ...
+      - |
+        class Bare:
+            def _run(self): ...
+            def run(self): ...
+      - |
+        class Outer:
+            def run(self): ...
+
+            class Inner:
+                def _run_fetch(self): ...
+      - |
+        class Root:
+            def run(self): ...
+
+
+        class Leaf(Root):
+            @staticmethod
+            async def _go_fetch(): ...
+
+- id: ost.privates-first
+  message: "a class body holds its private methods first, its public ones after"
+  tags: {law: "1", set: OST, principle: Rooted}
+  scope:
+    include: ["src/**/*.py"]
+  severity: error
+  check:
+    engine: members
+    order: privates-first
+    hooks: [field_validator, model_validator, field_serializer, model_serializer, computed_field, validator, root_validator]
+  fix: {safety: none, reason: "moving a method across a class body reorders its sections, which only its author lays out"}
+  cases:
+    valid:
+      - |
+        class Kept:
+            def _run_fetch(self): ...
+            def __init__(self): ...
+            def run(self): ...
+            def __repr__(self): ...
+      - |
+        class Checked(BaseModel):
+            def run(self): ...
+            @field_validator("name")
+            def _name_strip(cls, value): ...
+      - "class Empty:\n    size: int = 1\n"
+    invalid:
+      - |
+        class Kept:
+            def run(self): ...
+            def _run_late(self): ...
+      - |
+        from enum import StrEnum
+
+
+        class Wear(StrEnum):
+            ONE = "one"
+
+            def holds(self): ...
+            def _holds_search(self): ...
+      - |
+        class Sized:
+            @property
+            def size(self): ...
+            @property
+            def _size_raw(self): ...
+
+- id: ost.state-mirrors-tree
+  message: "a typed branch names only what exists: each attribute of `<Layer>State` is a module or a folder beside it, never a ghost branch"
+  tags: {law: "22", set: OST, principle: Rooted}
+  scope:
+    include: ["src/*/*/state.py", "src/*/logic/*/state.py"]
+    exclude: ["src/*/infra/state.py", "src/*/api/state.py"]
+  severity: warning
+  check:
+    engine: parity
+    names: {class: "{Dir}State", of: attributes}
+    entries: {beside: true, exclude: [ports, models, infra]}
+    relation: names-in-entries
+  fix: {safety: none, reason: "a ghost branch is a module not yet written or a name gone stale, and only its author knows which"}
+  cases:
+    valid:
+      - files:
+          src/pkg/engines/state.py: "class EnginesState:\n    cache: CacheEngine\n    lock: LockEngine\n"
+          src/pkg/engines/cache.py: "class CacheEngine: ...\n"
+          src/pkg/engines/lock.py: "class LockEngine: ...\n"
+          src/pkg/engines/helper.py: "x = 1\n"
+      - files:
+          src/pkg/engines/state.py: "class EnginesState:\n    agents: AgentsState\n"
+          src/pkg/engines/agents/ocr.py: "class OCRAgent: ...\n"
+          src/pkg/engines/ports.py: "class EnginePort: ...\n"
+      - files:
+          src/pkg/logic/graphs/state.py: "class GraphsState:\n    run: Runner\n"
+          src/pkg/logic/graphs/run.py: "class Runner: ...\n"
+          src/pkg/logic/graphs/models.py: "class Spec: ...\n"
+      - files:
+          src/pkg/engines/state.py: "class EnginesState:\n    cache: CacheEngine\n\n\nclass CacheState:\n    ghost: int\n"
+          src/pkg/engines/cache.py: "class CacheEngine: ...\n"
+      - files:
+          src/pkg/infra/state.py: "class State:\n    ghost: int\n"
+          src/pkg/api/state.py: "class AppState:\n    ghost: int\n"
+    invalid:
+      - files:
+          src/pkg/engines/state.py: "class EnginesState:\n    cache: CacheEngine\n    lock: LockEngine\n"
+          src/pkg/engines/cache.py: "class CacheEngine: ...\n"
+      - files:
+          src/pkg/engines/state.py: "class EnginesState:\n    models: int\n"
+          src/pkg/engines/models.py: "class Spec: ...\n"
+      - files:
+          src/pkg/logic/graphs/state.py: "class GraphsState:\n    run: Runner\n    ghost: Ghost\n"
+          src/pkg/logic/graphs/run.py: "class Runner: ...\n"
+      - files:
+          src/pkg/engines/state.py: "def build() -> None: ...\n"
+          src/pkg/engines/cache.py: "class CacheEngine: ...\n"

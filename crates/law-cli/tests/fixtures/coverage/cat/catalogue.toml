@@ -1,0 +1,19 @@
+name = "fx"
+version = "2.0.0"
+description = "a catalogue the coverage goldens count"
+
+[[prose]]
+tags = {law = "6", set = "A"}
+text = "surveying happens before the code exists"
+
+[[prose]]
+tags = {law = "10"}
+text = "no rule yet: graph (dead privates)"
+
+[[prose]]
+tags = {law = "2", set = "B"}
+text = "no rule yet: pattern (membership in a list)"
+
+[[prose]]
+tags = {kit = "py"}
+text = "carries no law at all"

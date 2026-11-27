@@ -1,0 +1,46 @@
+- id: elenchos.no-swallow-raises
+  message: "a test proves the failure it names: `pytest.raises` with a `match`, or the precise exception"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: PT011}
+  fix: {safety: none, reason: "ruff offers no fix: the message the failure must carry is the author's"}
+  cases:
+    valid:
+      - "import pytest\n\n\ndef test_run() -> None:\n    with pytest.raises(ValueError, match='bad'):\n        run()\n"
+    invalid:
+      - "import pytest\n\n\ndef test_run() -> None:\n    with pytest.raises(ValueError):\n        run()\n"
+
+- id: elenchos.no-swallow-pass
+  message: "a failure is never swallowed: no `except` that only passes"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: S110}
+  fix: {safety: none, reason: "ruff offers no fix: what the failure means here is the author's"}
+  cases:
+    valid:
+      - "try:\n    run()\nexcept ValueError as error:\n    raise KeyError('k') from error\n"
+    invalid:
+      - "try:\n    run()\nexcept Exception:\n    pass\n"
+
+- id: elenchos.no-cover-pragma
+  message: "a red is never hidden: no `# pragma: no cover`, the untested branch is tested or deleted"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  scope:
+    include: ["**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule: {kind: comment, regex: '#\s*(pragma|PRAGMA)[:\s]?\s*(no|NO)\s*(cover|COVER)'}
+  fix: {safety: none, reason: "the branch it hides is either dead and goes, or live and wants its test, and only the author knows which"}
+  cases:
+    valid:
+      - "x = 1  # noqa: E501"
+      - "def run() -> None:\n    raise NotImplementedError\n"
+      - "x = 1  # Pragma: no cover"
+    invalid:
+      - "def run() -> None:  # pragma: no cover\n    ...\n"
+      - "x = 1  # pragma: nocover"
+      - "x = 1  # pragma:   no   cover"
+      - "x = 1  # PRAGMA: NO COVER"
+      - "x = 1  #pragma no cover"
+      - "if TYPE_CHECKING:  # pragma:no cover\n    from a import b\n"

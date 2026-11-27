@@ -1,0 +1,19 @@
+[
+  {
+    "Located": {
+      "file_path": "src/pkg/ui/view.py",
+      "line_number": 1,
+      "original_line_number": 1,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "PrivateDependency": {
+            "dependency": "pkg.core.model.x",
+            "definition_module": "pkg.core",
+            "usage_module": "pkg.ui"
+          }
+        }
+      }
+    }
+  }
+]

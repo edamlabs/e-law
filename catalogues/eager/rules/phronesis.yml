@@ -1,0 +1,36 @@
+- id: phronesis.no-orphan-module
+  message: "no module imports it and it is no door: dead, or loaded by a path or a name no import writes; a module only a dead one imports shows once that one goes"
+  tags: {law: "10", set: PHRONESIS, principle: Economical}
+  severity: warning
+  check:
+    engine: graph
+    aspect: orphan
+    entries: ["src/*/main.py", "src/*/cli/main.py", "**/__main__.py", "**/conftest.py", "tests/**", "src/*/api/app.py"]
+  fix: {safety: none, reason: "a module nothing imports may still be run by path or by name: whether it is dead is read, never guessed"}
+  cases:
+    valid:
+      - files:
+          src/pkg/main.py: "from pkg import app\n"
+          src/pkg/app.py: "from pkg.infra import settings\n"
+          src/pkg/infra/settings.py: "DEBUG = False\n"
+      - files:
+          src/pkg/__main__.py: "import pkg.cli.run\n"
+          src/pkg/cli/run.py: "x = 1\n"
+      - files:
+          src/pkg/__init__.py: "\"\"\"The package.\"\"\"\n"
+          src/pkg/cli/main.py: "from pkg import version\n"
+      - files:
+          tests/unit/pkg/test_app.py: "from pkg.app import App\n"
+          tests/conftest.py: "import pytest\n"
+          src/pkg/app.py: "class App: ...\n"
+      - files:
+          src/pkg/api/app.py: "from pkg.api import routes\n"
+          src/pkg/api/routes.py: "x = 1\n"
+    invalid:
+      - files:
+          src/pkg/main.py: "from pkg import app\n"
+          src/pkg/app.py: "x = 1\n"
+          src/pkg/dead.py: "y = 2\n"
+      - files:
+          src/pkg/main.py: "x = 1\n"
+          src/pkg/loop.py: "import pkg.loop\n"
