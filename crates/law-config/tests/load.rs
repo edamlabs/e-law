@@ -3,7 +3,7 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::{Outcome, manifest, rule, write};
-use law_config::{Bundle, Fault, Origin, Project, load};
+use law_config::{Bundle, Fault, Lacking, Origin, Project, load};
 use law_model::Refusal;
 
 fn project(root: &Path, config: &str) -> Result<Project, Box<dyn std::error::Error>> {
@@ -784,5 +784,120 @@ fn load_threshold_override_of_a_declared_threshold_loads() -> Outcome {
     let thresholds = &loaded.catalogues[0].profiles[0].thresholds;
     assert_eq!(thresholds.get("lines"), Some(&400));
     assert_eq!(thresholds.get("depth"), Some(&3));
+    Ok(())
+}
+
+fn metered(id: &str, kinds: &str, measure: &str, over: &str) -> String {
+    format!(
+        "- id: {id}\n  message: m\n  check: {{engine: metric, kinds: [{kinds}], measure: {measure}, over: {over}}}\n  fix: {{safety: none, reason: x}}\n"
+    )
+}
+
+#[test]
+fn load_metric_rule_over_a_threshold_its_profile_does_not_declare_is_unfed() -> Outcome {
+    let tmp = tempfile::tempdir()?;
+    manifest(tmp.path(), "c")?;
+    write(
+        tmp.path(),
+        "c/profiles/p.yml",
+        "- kind: unit\n  home: [\"a/*.py\"]\n  thresholds: {lines: 9}\n",
+    )?;
+    write(tmp.path(), "c/rules/a.yml", &metered("a.one", "unit", "lines", "depth"))?;
+    let faults = faults_of(tmp.path(), "catalogues = [\"c/\"]\n", &[])?;
+    assert!(
+        matches!(faults.as_slice(), [Fault::UnfedMeasure { rule, kind, lacking, .. }]
+            if rule.as_str() == "a.one" && kind.as_str() == "unit" && *lacking == Lacking::Threshold("depth".to_owned())),
+        "{faults:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn load_metric_companions_over_a_profile_without_a_suffix_is_unfed_and_other_measures_are_not() -> Outcome {
+    let tmp = tempfile::tempdir()?;
+    manifest(tmp.path(), "c")?;
+    write(
+        tmp.path(),
+        "c/profiles/p.yml",
+        "- kind: unit\n  home: [\"a/*.py\"]\n  thresholds: {size: 3}\n",
+    )?;
+    write(
+        tmp.path(),
+        "c/rules/a.yml",
+        &metered("a.one", "unit", "companions", "size"),
+    )?;
+    let faults = faults_of(tmp.path(), "catalogues = [\"c/\"]\n", &[])?;
+    assert!(
+        matches!(faults.as_slice(), [Fault::UnfedMeasure { rule, kind, lacking: Lacking::Suffix, .. }]
+            if rule.as_str() == "a.one" && kind.as_str() == "unit"),
+        "{faults:?}"
+    );
+    for measure in ["lines", "classes", "functions", "methods"] {
+        write(tmp.path(), "c/rules/a.yml", &metered("a.one", "unit", measure, "size"))?;
+        let project = project(tmp.path(), "catalogues = [\"c/\"]\n")?;
+        assert!(load(&project, &|_| None).is_ok(), "{measure}");
+    }
+    Ok(())
+}
+
+#[test]
+fn load_metric_rule_over_two_kinds_names_only_the_kind_that_is_unfed() -> Outcome {
+    let tmp = tempfile::tempdir()?;
+    manifest(tmp.path(), "c")?;
+    write(
+        tmp.path(),
+        "c/profiles/p.yml",
+        "- kind: unit\n  home: [\"a/*.py\"]\n  thresholds: {size: 3}\n- kind: part\n  home: [\"b/*.py\"]\n",
+    )?;
+    write(
+        tmp.path(),
+        "c/rules/a.yml",
+        &metered("a.one", "unit, part, ghost", "lines", "size"),
+    )?;
+    let faults = faults_of(tmp.path(), "catalogues = [\"c/\"]\n", &[])?;
+    assert!(
+        matches!(faults.as_slice(), [
+            Fault::UnknownKind { kind: ghost, .. },
+            Fault::UnfedMeasure { kind: part, .. },
+        ] if ghost.as_str() == "ghost" && part.as_str() == "part")
+            || matches!(faults.as_slice(), [
+                Fault::UnfedMeasure { kind: part, .. },
+                Fault::UnknownKind { kind: ghost, .. },
+            ] if ghost.as_str() == "ghost" && part.as_str() == "part"),
+        "{faults:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn load_ruff_rules_of_one_code_with_different_settings_are_distinct_and_the_same_settings_are_not() -> Outcome {
+    let one = |id: &str, settings: &str| {
+        format!(
+            "- id: {id}\n  message: m\n  check: {{engine: ruff, code: TID251, settings: {settings}}}\n  fix: {{safety: none, reason: x}}\n"
+        )
+    };
+    let tmp = tempfile::tempdir()?;
+    manifest(tmp.path(), "c")?;
+    write(
+        tmp.path(),
+        "c/rules/a.yml",
+        &format!(
+            "{}{}",
+            one("a.one", "{line-length: 1}"),
+            one("a.two", "{line-length: 2}")
+        ),
+    )?;
+    assert!(load(&project(tmp.path(), "catalogues = [\"c/\"]\n")?, &|_| None).is_ok());
+    write(
+        tmp.path(),
+        "c/rules/a.yml",
+        &format!(
+            "{}{}",
+            one("a.one", "{line-length: 1}"),
+            one("a.two", "{line-length: 1}")
+        ),
+    )?;
+    let faults = faults_of(tmp.path(), "catalogues = [\"c/\"]\n", &[])?;
+    assert!(matches!(faults.as_slice(), [Fault::Indistinct { .. }]), "{faults:?}");
     Ok(())
 }

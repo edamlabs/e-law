@@ -694,3 +694,91 @@ fn schema_rules_accept_a_profile_check_of_every_aspect_and_reject_each_malformed
     assert!(mismatches.is_empty(), "{mismatches:#?}");
     Ok(())
 }
+
+#[test]
+fn schema_rules_accept_a_metric_check_of_every_measure_and_reject_each_malformed_one() -> Outcome {
+    let all = schema();
+    for measure in ["lines", "classes", "companions", "functions", "methods"] {
+        let rule = rule_with(
+            "check",
+            json!({"engine": "metric", "kinds": ["driver", "adapter"], "measure": measure, "over": "lines"}),
+        )?;
+        assert!(accepts(&all.rules, &rule)?, "{measure}: {}", why(&all.rules, &rule)?);
+        assert!(serde_json::from_value::<Vec<Rule>>(rule).is_ok(), "{measure}");
+    }
+    let ok = json!({"engine": "metric", "kinds": ["driver"], "measure": "lines", "over": "lines"});
+    let with = |key: &str, value: Value| {
+        let mut check = ok.clone();
+        check[key] = value;
+        rule_with("check", check)
+    };
+    let mismatches = agree::<Vec<Rule>>(
+        &all.rules,
+        &[
+            ("empty kinds", with("kinds", json!([]))?),
+            ("kinds as text", with("kinds", json!("driver"))?),
+            ("bad kind", with("kinds", json!(["Driver"]))?),
+            ("unknown measure", with("measure", json!("depth"))?),
+            ("measure cased", with("measure", json!("Lines"))?),
+            ("empty over", with("over", json!(""))?),
+            ("over not text", with("over", json!(3))?),
+            ("unknown field", with("extra", json!(1))?),
+            (
+                "no over",
+                rule_with(
+                    "check",
+                    json!({"engine": "metric", "kinds": ["driver"], "measure": "lines"}),
+                )?,
+            ),
+            (
+                "no measure",
+                rule_with(
+                    "check",
+                    json!({"engine": "metric", "kinds": ["driver"], "over": "lines"}),
+                )?,
+            ),
+            (
+                "no kinds",
+                rule_with(
+                    "check",
+                    json!({"engine": "metric", "measure": "lines", "over": "lines"}),
+                )?,
+            ),
+        ],
+    )?;
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
+    Ok(())
+}
+
+#[test]
+fn schema_rules_accept_ruff_settings_of_any_toml_value_and_reject_what_toml_cannot_hold() -> Outcome {
+    let all = schema();
+    let ruff = |settings: Value| {
+        rule_with(
+            "check",
+            json!({"engine": "ruff", "code": "TID251", "settings": settings}),
+        )
+    };
+    for settings in [
+        json!({}),
+        json!({"line-length": 100}),
+        json!({"lint.flake8-tidy-imports.banned-api": {"os.environ": {"msg": "m"}}}),
+        json!({"lint.select": ["E", "F"], "lint.preview": true, "lint.x": 1.5}),
+    ] {
+        let rule = ruff(settings.clone())?;
+        assert!(accepts(&all.rules, &rule)?, "{settings}: {}", why(&all.rules, &rule)?);
+        assert!(serde_json::from_value::<Vec<Rule>>(rule).is_ok(), "{settings}");
+    }
+    let mismatches = agree::<Vec<Rule>>(
+        &all.rules,
+        &[
+            ("null value", ruff(json!({"lint.x": null}))?),
+            ("null nested in a table", ruff(json!({"lint.x": {"a": null}}))?),
+            ("null in a list", ruff(json!({"lint.x": [1, null]}))?),
+            ("a list, not a map", ruff(json!([1]))?),
+            ("text, not a map", ruff(json!("x"))?),
+        ],
+    )?;
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
+    Ok(())
+}

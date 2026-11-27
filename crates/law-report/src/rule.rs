@@ -2,8 +2,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use law_model::{
-    Case, Check, FixPolicy, FixedCase, Former, Glob, GraphSpec, Kind, MembersSpec, ParitySpec, ProfileSpec, RuffSpec,
-    Rule, Severity, ShapeSpec, Snippet, TachSpec, TreeSpec, TySpec,
+    Case, Check, FixPolicy, FixedCase, Former, Glob, GraphSpec, Kind, MembersSpec, MetricSpec, ParitySpec, ProfileSpec,
+    RuffSpec, Rule, Severity, ShapeSpec, Snippet, TachSpec, TreeSpec, TySpec,
 };
 
 use crate::format::Format;
@@ -34,9 +34,22 @@ impl Card {
 
     fn engine(check: &Check) -> String {
         match check {
-            Check::Ruff(RuffSpec { code, message }) => message
-                .as_ref()
-                .map_or_else(|| format!("ruff {code}"), |message| format!("ruff {code} /{message}/")),
+            Check::Ruff(RuffSpec {
+                code,
+                message,
+                settings,
+            }) => {
+                let keys: Vec<&str> = settings.keys().map(String::as_str).collect();
+                [
+                    Some(format!("ruff {code}")),
+                    message.as_ref().map(|message| format!("/{message}/")),
+                    (!keys.is_empty()).then(|| format!("with {}", keys.join(LIST))),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<String>>()
+                .join(" ")
+            }
             Check::Ty(TySpec { rule }) => rule
                 .as_ref()
                 .map_or_else(|| "ty".to_owned(), |rule| format!("ty {rule}")),
@@ -46,6 +59,10 @@ impl Card {
             Check::Profile(ProfileSpec { kinds, aspect }) => {
                 let kinds: Vec<&str> = kinds.iter().map(Kind::as_str).collect();
                 format!("profile {} {aspect}", kinds.join(LIST))
+            }
+            Check::Metric(MetricSpec { kinds, measure, over }) => {
+                let kinds: Vec<&str> = kinds.iter().map(Kind::as_str).collect();
+                format!("metric {} {measure} over {over}", kinds.join(LIST))
             }
             Check::Members(MembersSpec { lineage, order, .. }) => {
                 let parts = [lineage.as_ref().map(|_| "lineage"), order.as_ref().map(|_| "order")];

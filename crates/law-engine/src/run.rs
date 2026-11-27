@@ -63,6 +63,7 @@ pub struct Run {
     unused: ReservedRule,
     ancestry: Arc<Ancestry>,
     profiled: bool,
+    metered: bool,
 }
 
 /// What a run produced: its report, the faults of the paths it could not check, the classes it judged, how big the
@@ -276,7 +277,14 @@ impl Run {
         batch: Vec<Box<dyn BatchEngine>>,
         environment: &Environment,
     ) -> Result<Self, Vec<Fault>> {
-        let declared = ScopeMatcher::profiles(&loaded.catalogues);
+        let overrides = &loaded.project.config.profiles;
+        let declared: BTreeMap<_, _> = ScopeMatcher::profiles(&loaded.catalogues)
+            .into_iter()
+            .map(|(kind, profile)| match overrides.get(&kind) {
+                Some(over) => (kind, profile.tuned(&over.thresholds)),
+                None => (kind, profile),
+            })
+            .collect();
         let rules = || loaded.catalogues.iter().flat_map(|catalogue| &catalogue.rules);
         let mut plan = rules()
             .filter(|rule| selection.admits(rule))
@@ -332,6 +340,7 @@ impl Run {
             (Some(ledger), Some(pragma), Some(expired), Some(unused)) if plan.faults.is_empty() => {
                 let external = std::mem::take(&mut plan.external);
                 let profiled = !plan.profile.is_empty();
+                let metered = !plan.metric.is_empty();
                 let ancestry = Arc::new(Ancestry::new(&loaded.project.root, &config.roots, environment));
                 let (mut files, tree, graph) = plan.engines(Arc::clone(&ancestry), &loaded.project.root);
                 files.push(Box::new(PragmaEngine::new(&loaded.catalogues)));
@@ -355,6 +364,7 @@ impl Run {
                     unused,
                     ancestry,
                     profiled,
+                    metered,
                 })
             }
             _ => Err(plan.faults),
@@ -438,6 +448,7 @@ impl Run {
         let mut census = sink.census;
         (census.project, census.foreign) = self.ancestry.read();
         census.profile = self.profiled.then(|| census.profile.unwrap_or_default());
+        census.metric = self.metered.then(|| census.metric.unwrap_or_default());
         let mut report = Report::new(run, findings.into_iter().chain(reserved.findings).collect());
         report.rules = report
             .findings

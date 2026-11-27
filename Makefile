@@ -31,7 +31,7 @@ lint: ## rustfmt check and clippy with the house lints
 	@cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 test: ## every test
-	@cargo test --workspace --all-targets --all-features --locked $(ARGS)
+	@cargo test --workspace --all-targets --all-features --locked --no-fail-fast $(ARGS)
 
 deny: ## advisories, licenses, bans, sources
 	@cargo deny check

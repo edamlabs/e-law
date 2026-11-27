@@ -2,7 +2,18 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use law_model::{Aspect, Former, Invalid, Kind, Rooted, RuleId};
+use law_model::{Aspect, Former, Invalid, Kind, Measure, Rooted, RuleId};
+
+/// What a profile gives no data for, when a `metric` rule needs it.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum Lacking {
+    /// The suffix that tells an entity class from a companion.
+    #[error("suffix")]
+    Suffix,
+    /// A threshold, by its name.
+    #[error("threshold `{0}`")]
+    Threshold(String),
+}
 
 /// Why a configuration or a catalogue could not be loaded; every one is collected, never the first alone.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -70,6 +81,20 @@ pub enum Fault {
         kind: Kind,
         /// The aspect.
         aspect: Aspect,
+    },
+    /// A `metric` rule measuring what its kind's profile gives no data for.
+    #[error("{}: rule `{rule}` measures `{measure}`, which profile `{kind}` gives no {lacking} for", path.display())]
+    UnfedMeasure {
+        /// Where the rule is declared.
+        path: PathBuf,
+        /// The rule.
+        rule: RuleId,
+        /// The kind whose profile is silent.
+        kind: Kind,
+        /// The measure.
+        measure: Measure,
+        /// What the profile lacks.
+        lacking: Lacking,
     },
     /// A threshold override its profile does not declare.
     #[error("{}: profile `{kind}` declares no threshold `{name}`", path.display())]
@@ -259,6 +284,19 @@ impl Rooted for Fault {
                 rule,
                 kind,
                 aspect,
+            },
+            Self::UnfedMeasure {
+                path,
+                rule,
+                kind,
+                measure,
+                lacking,
+            } => Self::UnfedMeasure {
+                path: path.rooted(root),
+                rule,
+                kind,
+                measure,
+                lacking,
             },
             Self::UnknownThreshold { path, kind, name } => Self::UnknownThreshold {
                 path: path.rooted(root),

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::graph::GraphSpec;
 use crate::members::MembersSpec;
+use crate::metric::MetricSpec;
 use crate::parity::ParitySpec;
 use crate::pattern::PatternSpec;
 use crate::profile::ProfileSpec;
@@ -37,6 +38,8 @@ pub enum Check {
     Graph(GraphSpec),
     /// What the names a file's classes declare stand for: the modules beside it, or the files of a glob.
     Parity(ParitySpec),
+    /// What a module of a profile's home measures, against a threshold the profile declares.
+    Metric(MetricSpec),
 }
 
 impl Check {
@@ -54,6 +57,7 @@ impl Check {
             Self::Profile(_) => "profile",
             Self::Graph(_) => "graph",
             Self::Parity(_) => "parity",
+            Self::Metric(_) => "metric",
         }
     }
 

@@ -12,7 +12,7 @@ mod select;
 pub use catalogue::Manifest;
 pub use config::{Config, Overrides, Source};
 pub use exceptions::Exceptions;
-pub use fault::Fault;
+pub use fault::{Fault, Lacking};
 pub use load::{Builtins, Loaded, Project, catalogue, discover, load};
 pub use origin::{Bundle, Origin};
 pub use schema::{Schemas, schema};

@@ -107,7 +107,8 @@ pub(crate) struct Class {
 /// What a module declares, read off its tree: its module-level classes, imports (the first binding of a name wins,
 /// a relative one kept with its leading dots), star imports, the names it binds otherwise, whether it exports lazily
 /// through a module `__getattr__`, the functions among those names, the names bound to a call on a dotted first
-/// argument (`Mapping = _alias(collections.abc.Mapping, 2)` → `Mapping`: `_alias`, `collections.abc.Mapping`); every
+/// argument (`Mapping = _alias(collections.abc.Mapping, 2)` → `Mapping`: `_alias`, `collections.abc.Mapping`); how
+/// many module-level function definitions it writes, a name written twice (an overload) counted twice; every
 /// class it holds, nested ones included, in order; every import statement, nested ones included, in order; and, read
 /// from a foreign root, the package its relative imports resolve against; read through an import, the dotted name of
 /// the module.
@@ -120,6 +121,7 @@ pub(crate) struct Outline {
     pub(crate) stars: Vec<String>,
     pub(crate) values: BTreeSet<String>,
     pub(crate) functions: BTreeSet<String>,
+    pub(crate) defined: usize,
     pub(crate) calls: BTreeMap<String, (String, String)>,
     pub(crate) lazy: bool,
     pub(crate) every: Vec<Arc<Class>>,
@@ -433,6 +435,7 @@ impl Outline {
                 .filter(|node| node.kind() == FUNCTION)
                 .filter_map(Self::value)
                 .collect(),
+            defined: bindings.iter().filter(|node| node.kind() == FUNCTION).count(),
             calls,
             values,
             every: read.into_iter().map(|(_, class)| class).collect(),

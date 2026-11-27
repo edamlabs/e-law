@@ -3,6 +3,7 @@ mod common;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 use common::{Out, Outcome, Project, RUFF, only, passed, path_with, skip, stub, tool_dir, version_of};
 use serde_json::Value;
@@ -835,5 +836,288 @@ fn ruff_exception_by_path_silences_its_findings_like_any_rules() -> Outcome {
         out.stdout,
         "pkg/b.py:1:1: t.print no print: `print` found\n\nFound 1 finding (1 error, 0 warnings).\n"
     );
+    Ok(())
+}
+
+///// settings /////
+
+const ENVIRON_TABLE: &str = "lint.flake8-tidy-imports.banned-api = {\"os.environ\" = {\"msg\" = \"use settings\"}}";
+const GETENV_TABLE: &str = "lint.flake8-tidy-imports.banned-api = {\"os.getenv\" = {\"msg\" = \"use settings\"}}";
+
+fn banning(id: &str, name: &str, scope: &str) -> String {
+    format!(
+        "- id: {id}
+  message: no {name}
+  scope: {{include: [\"{scope}\"]}}
+  check:
+    engine: ruff
+    code: TID251
+    message: \"`{name}`\"
+    settings:
+      lint.flake8-tidy-imports.banned-api: {{\"{name}\": {{msg: use settings}}}}
+  fix: {{safety: none, reason: ported}}
+"
+    )
+}
+
+fn tid(file: &str, name: &str, row: u32) -> String {
+    format!(
+        "{{\"code\":\"TID251\",\"filename\":\"{file}\",\"location\":{{\"row\":{row},\"column\":1}},\"end_location\":{{\"row\":{row},\"column\":3}},\"message\":\"`{name}` is banned: use settings\",\"fix\":null}}"
+    )
+}
+
+#[test]
+fn ruff_settings_are_passed_as_one_inline_config_per_key() -> Outcome {
+    let project = project(&banning("t.environ", "os.environ", "pkg/**/*.py"))?;
+    project.file("pkg/a.py", "x = 1\n")?;
+    logging_stub(&project, "ruff", "9.9.9", "[]")?;
+    let out = project.check_on(&stub_path(&project)?, &[])?;
+    assert!(passed(&out), "{out:?}");
+    assert_eq!(
+        args_log(&project)?,
+        [
+            "ruff --version".to_owned(),
+            format!(
+                "ruff check --output-format json --no-fix --exit-zero --select TID251 --config {ENVIRON_TABLE} -- pkg"
+            )
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn ruff_one_process_per_distinct_settings_set_and_rules_without_settings_share_one() -> Outcome {
+    let rules = format!(
+        "{}{}{}{PRINT}{BARE}",
+        banning("t.environ", "os.environ", "pkg/**/*.py"),
+        banning("t.again", "os.environ", "pkg/**/*.py"),
+        banning("t.getenv", "os.getenv", "pkg/**/*.py"),
+    );
+    let project = project(&rules)?;
+    project.file("pkg/a.py", "x = 1\n")?;
+    logging_stub(&project, "ruff", "9.9.9", "[]")?;
+    let out = project.check_on(&stub_path(&project)?, &[])?;
+    assert!(passed(&out), "{out:?}");
+    let mut log = args_log(&project)?;
+    log.sort();
+    assert_eq!(
+        log,
+        [
+            "ruff --version".to_owned(),
+            "ruff check --output-format json --no-fix --exit-zero --select E722,T201 -- pkg".to_owned(),
+            format!(
+                "ruff check --output-format json --no-fix --exit-zero --select TID251 --config {ENVIRON_TABLE} -- pkg"
+            ),
+            format!(
+                "ruff check --output-format json --no-fix --exit-zero --select TID251 --config {GETENV_TABLE} -- pkg"
+            ),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn ruff_settings_sets_run_beside_each_other_not_one_after_the_other() -> Outcome {
+    let rules = format!(
+        "{}{}{PRINT}",
+        banning("t.environ", "os.environ", "pkg/**/*.py"),
+        banning("t.getenv", "os.getenv", "pkg/**/*.py"),
+    );
+    let project = project(&rules)?;
+    project.file("pkg/a.py", "x = 1\n")?;
+    stub(
+        &stub_dir(&project),
+        "ruff",
+        "case \"$1\" in --version) echo 'ruff 9.9.9';; *) sleep 2; echo '[]';; esac",
+    )?;
+    let start = Instant::now();
+    let out = project.check_on(&stub_path(&project)?, &[])?;
+    let elapsed = start.elapsed();
+    assert!(passed(&out), "{out:?}");
+    assert!(elapsed < Duration::from_secs(5), "three 2 s processes took {elapsed:?}");
+    Ok(())
+}
+
+#[test]
+fn ruff_select_runs_only_the_settings_sets_of_the_selected_rules() -> Outcome {
+    let rules = format!(
+        "{}{}",
+        banning("t.environ", "os.environ", "pkg/**/*.py"),
+        banning("t.getenv", "os.getenv", "pkg/**/*.py"),
+    );
+    let project = project(&rules)?;
+    project.file("pkg/a.py", "x = 1\n")?;
+    logging_stub(&project, "ruff", "9.9.9", "[]")?;
+    let out = project.check_on(&stub_path(&project)?, &["--select", "t.getenv"])?;
+    assert!(passed(&out), "{out:?}");
+    assert_eq!(
+        args_log(&project)?,
+        [
+            "ruff --version".to_owned(),
+            format!(
+                "ruff check --output-format json --no-fix --exit-zero --select TID251 --config {GETENV_TABLE} -- pkg"
+            )
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn ruff_each_settings_set_signs_only_its_own_rules_by_message() -> Outcome {
+    let rules = format!(
+        "{}{}",
+        banning("t.environ", "os.environ", "pkg/**/*.py"),
+        banning("t.getenv", "os.getenv", "pkg/**/*.py"),
+    );
+    let project = project(&rules)?;
+    project.file("pkg/a.py", "import os\n\na = os.environ\nb = os.getenv('x')\n")?;
+    let file = format!("{}/pkg/a.py", canonical(&project)?);
+    let both = format!("[{},{}]", tid(&file, "os.environ", 3), tid(&file, "os.getenv", 4));
+    logging_stub(&project, "ruff", "9.9.9", &both)?;
+    let out = project.check_on(&stub_path(&project)?, &[])?;
+    assert!(
+        out.stdout
+            .contains("pkg/a.py:3:1: t.environ no os.environ: `os.environ` is banned: use settings"),
+        "{}",
+        out.stdout
+    );
+    assert!(
+        out.stdout
+            .contains("pkg/a.py:4:1: t.getenv no os.getenv: `os.getenv` is banned: use settings"),
+        "{}",
+        out.stdout
+    );
+    assert!(out.stdout.contains("Found 2 findings"), "{}", out.stdout);
+    Ok(())
+}
+
+#[test]
+fn ruff_same_code_with_different_settings_and_no_message_is_not_indistinct() -> Outcome {
+    let bare =
+        |id: &str, name: &str| banning(id, name, "pkg/**/*.py").replace(&format!("    message: \"`{name}`\"\n"), "");
+    let apart = project(&format!("{}{}", bare("t.a", "os.environ"), bare("t.b", "os.getenv")))?;
+    apart.file("pkg/a.py", "x = 1\n")?;
+    logging_stub(&apart, "ruff", "9.9.9", "[]")?;
+    assert!(passed(&apart.check_on(&stub_path(&apart)?, &[])?));
+    let same = project(&format!("{}{}", bare("t.a", "os.environ"), bare("t.b", "os.environ")))?;
+    let out = same.check(&[])?;
+    assert_eq!(out.code, 2, "{out:?}");
+    assert!(out.stderr.contains("nothing tells them apart"), "{}", out.stderr);
+    Ok(())
+}
+
+#[test]
+fn ruff_settings_that_are_null_or_not_a_table_of_keys_are_refused() -> Outcome {
+    for settings in ["{lint.x: null}", "{lint.x: {a: null}}", "[1, 2]", "\"x\""] {
+        let rule =
+            banning("t.environ", "os.environ", "pkg/**/*.py").replace("{\"os.environ\": {msg: use settings}}", "1");
+        let rule = rule.replace(
+            "settings:\n      lint.flake8-tidy-imports.banned-api: 1",
+            &format!("settings: {settings}"),
+        );
+        let out = project(&rule)?.check(&[])?;
+        assert_eq!(out.code, 2, "{settings}: {out:?}");
+    }
+    Ok(())
+}
+
+const FOUR: &str = "src/pkg/a.py";
+const FOUR_CODE: &str = "import os\nimport logging\n\na = os.environ\nb = os.getenv('x')\nlogging.info('x')\n";
+const TESTS: &str = "tests/test_a.py";
+const TESTS_CODE: &str = "import pytest\nfrom unittest import mock\nimport unittest.mock\n\n\ndef test_a():\n    pytest.skip('x')\n\n\n@pytest.mark.xfail\n@pytest.mark.skip\ndef test_b():\n    pytest.importorskip('x')\n";
+
+fn eager_project() -> Result<Project, Box<dyn std::error::Error>> {
+    let project = Project::new()?;
+    project.config("roots = [\"src\", \"tests\"]\ncatalogues = [\"eager\"]\n")?;
+    project.file(FOUR, FOUR_CODE)?;
+    project.file(TESTS, TESTS_CODE)?;
+    Ok(project)
+}
+
+fn rows(out: &Out) -> Vec<String> {
+    out.stdout
+        .lines()
+        .filter_map(|line| {
+            let (place, rest) = line.split_once(": ")?;
+            let id = rest.split_whitespace().next()?;
+            id.contains('.').then(|| format!("{place} {id}"))
+        })
+        .collect()
+}
+
+#[test]
+fn ruff_the_four_tid251_rules_of_eager_each_find_their_own_names_through_real_ruff() -> Outcome {
+    let Some(path) = real(&[RUFF]) else { return skip(RUFF) };
+    let project = eager_project()?;
+    let out = project.check_on(
+        &path,
+        &[
+            "--select",
+            "banks.no-os-environ",
+            "--select",
+            "banks.no-stdlib-logging",
+            "--select",
+            "elenchos.no-ghost-skip",
+            "--select",
+            "elenchos.mocker-only",
+        ],
+    )?;
+    assert_eq!(
+        rows(&out),
+        [
+            "src/pkg/a.py:2:8 banks.no-stdlib-logging",
+            "src/pkg/a.py:4:5 banks.no-os-environ",
+            "src/pkg/a.py:5:5 banks.no-os-environ",
+            "tests/test_a.py:2:22 elenchos.mocker-only",
+            "tests/test_a.py:3:8 elenchos.mocker-only",
+            "tests/test_a.py:7:5 elenchos.no-ghost-skip",
+            "tests/test_a.py:10:2 elenchos.no-ghost-skip",
+            "tests/test_a.py:11:2 elenchos.no-ghost-skip",
+            "tests/test_a.py:13:5 elenchos.no-ghost-skip",
+        ],
+        "{}",
+        out.stdout
+    );
+    assert_eq!(out.code, 1);
+    Ok(())
+}
+
+#[test]
+fn ruff_a_settings_override_replaces_the_projects_own_banned_api_table_in_our_run_only() -> Outcome {
+    let Some(path) = real(&[RUFF]) else { return skip(RUFF) };
+    let project = project(&banning("t.environ", "os.environ", "pkg/**/*.py"))?;
+    project.file(
+        "pyproject.toml",
+        "[tool.ruff.lint]\nselect = [\"TID251\"]\n[tool.ruff.lint.flake8-tidy-imports.banned-api]\n\"os.getenv\".msg = \"own\"\n",
+    )?;
+    project.file("pkg/a.py", "import os\n\na = os.environ\nb = os.getenv('x')\n")?;
+    let out = project.check_on(&path, &[])?;
+    assert_eq!(rows(&out), ["pkg/a.py:3:5 t.environ"], "{}", out.stdout);
+    let own = Command::new(tool_dir(RUFF).ok_or("ruff")?.join(RUFF))
+        .args(["check", "--output-format", "concise", "--no-fix", "pkg"])
+        .current_dir(project.path())
+        .output()?;
+    let own = String::from_utf8(own.stdout)?;
+    assert!(
+        own.contains("`os.getenv` is banned: own") && !own.contains("os.environ"),
+        "{own}"
+    );
+    Ok(())
+}
+
+#[test]
+fn ruff_trial_runs_a_case_with_the_rules_settings_over_the_projects_table() -> Outcome {
+    let Some(path) = real(&[RUFF]) else { return skip(RUFF) };
+    let rule = format!(
+        "{}  cases:\n    valid: [\"import os\\n\\na = os.getenv('x')\\n\"]\n    invalid: [\"import os\\n\\na = os.environ\\n\"]\n",
+        banning("t.environ", "os.environ", "pkg/**/*.py")
+    );
+    let project = project(&rule)?;
+    project.file(
+        "pyproject.toml",
+        "[tool.ruff.lint.flake8-tidy-imports.banned-api]\n\"os.getenv\".msg = \"own\"\n",
+    )?;
+    let out = project.run_on(&path, &["test"])?;
+    assert_eq!(out.stdout, "Tested 1 rule, 2 cases: 0 failed, 0 untested.\n", "{out:?}");
     Ok(())
 }

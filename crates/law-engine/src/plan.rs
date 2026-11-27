@@ -9,6 +9,7 @@ use crate::engine::FileEngine;
 use crate::fault::{Fault, Feature};
 use crate::graph::{GraphEngine, GraphRule};
 use crate::members::{MembersEngine, MembersRule};
+use crate::metric::{MetricEngine, MetricRule};
 use crate::parity::{ParityEngine, ParityRule};
 use crate::pattern::{PatternEngine, PatternRule};
 use crate::profile::{ProfileEngine, ProfileRule};
@@ -24,6 +25,7 @@ pub(crate) struct Plan {
     pub(crate) pattern: Vec<PatternRule>,
     pub(crate) members: Vec<MembersRule>,
     pub(crate) profile: Vec<ProfileRule>,
+    pub(crate) metric: Vec<MetricRule>,
     pub(crate) graph: Vec<GraphRule>,
     pub(crate) parity: Vec<ParityRule>,
     pub(crate) external: BTreeMap<RuleId, ScopeMatcher>,
@@ -51,6 +53,10 @@ impl Plan {
                 }
                 Check::Profile(spec) => {
                     self.profile.push(ProfileRule::new(rule, spec, scope, profiles));
+                    Ok(())
+                }
+                Check::Metric(spec) => {
+                    self.metric.push(MetricRule::new(rule, spec, scope, profiles));
                     Ok(())
                 }
                 Check::Graph(spec) => {
@@ -94,6 +100,7 @@ impl Plan {
             Box::new(PatternEngine::new(self.pattern)),
             Box::new(ShapeEngine::new(self.shape)),
             Box::new(ProfileEngine::new(self.profile, Arc::clone(&ancestry))),
+            Box::new(MetricEngine::new(self.metric)),
             Box::new(MembersEngine::new(self.members, ancestry)),
             Box::new(ParityEngine::new(self.parity, root.to_owned())),
         ];

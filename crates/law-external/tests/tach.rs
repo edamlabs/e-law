@@ -83,6 +83,8 @@ fn tach_engine_names_the_tool_its_version_and_the_selected_rules_in_catalogue_or
     let engine = TachEngine::new(&root.loaded, &root.selection(&["t.cycle", "t.layer"])?)
         .map_err(|f| f.to_string())?
         .ok_or("no engine")?;
+    assert_eq!((engine.name(), engine.version()), ("tach", ""));
+    engine.check(root.dir.path(), &[PathBuf::from(".")], &mut Sink::default());
     assert_eq!((engine.name(), engine.version()), ("tach", "9.9.9"));
     let rules: Vec<&str> = engine.rules().iter().map(RuleId::as_str).collect();
     assert_eq!(rules, ["t.layer", "t.cycle"]);

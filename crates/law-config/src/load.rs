@@ -4,7 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use law_model::{
-    Catalogue, Check, Exception, Former, Kind, Profile, ProfileSpec, RuffSpec, Rule, RuleId, Snippet, TachSpec, TySpec,
+    Catalogue, Check, Exception, Former, Kind, Measure, MetricSpec, Profile, ProfileSpec, RuffSpec, Rule, RuleId,
+    Snippet, TachSpec, TySpec,
 };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -13,7 +14,7 @@ use serde_json::Value;
 use crate::catalogue::{MANIFEST, Manifest, PROFILES, RULES, YAML};
 use crate::config::{Config, LAW, PYPROJECT, Source};
 use crate::exceptions::Exceptions;
-use crate::fault::Fault;
+use crate::fault::{Fault, Lacking};
 use crate::origin::{Origin, Set};
 
 const MISSING: &str = "missing: a catalogue declares itself in its catalogue.toml";
@@ -194,7 +195,13 @@ fn profile_twice(kind: Kind, first: PathBuf, second: PathBuf) -> Fault {
 
 fn taken(rule: &Rule) -> Option<String> {
     match &rule.check {
-        Check::Ruff(RuffSpec { code, message: None }) => Some(format!("ruff `{code}`")),
+        Check::Ruff(spec @ RuffSpec { message: None, .. }) => Some(format!(
+            "ruff `{}`{}",
+            spec.code,
+            spec.overrides()
+                .iter()
+                .fold(String::new(), |key, over| key + " with " + over)
+        )),
         Check::Ty(TySpec { rule: Some(name) }) => Some(format!("ty `{name}`")),
         Check::Ty(TySpec { rule: None }) => Some("ty".to_owned()),
         Check::Tach(TachSpec { code: Some(code) }) => Some(format!("tach `{code}`")),
@@ -340,9 +347,44 @@ fn resolve(project: &Project, source: &Source, builtins: Builtins<'_>) -> Result
     }
 }
 
+fn measured(rule: &Rule, file: &Path, declared: &BTreeMap<&Kind, &Profile>) -> Vec<Fault> {
+    let Check::Metric(MetricSpec { kinds, measure, over }) = &rule.check else {
+        return Vec::new();
+    };
+    kinds
+        .iter()
+        .flat_map(|kind| {
+            let unknown = declared.get(kind).is_none().then(|| Fault::UnknownKind {
+                path: file.to_owned(),
+                kind: kind.clone(),
+            });
+            let profile = declared.get(kind);
+            let suffix = profile
+                .filter(|profile| *measure == Measure::Companions && profile.suffix.is_none())
+                .map(|_| Fault::UnfedMeasure {
+                    path: file.to_owned(),
+                    rule: rule.id.clone(),
+                    kind: kind.clone(),
+                    measure: *measure,
+                    lacking: Lacking::Suffix,
+                });
+            let threshold = profile
+                .filter(|profile| !profile.thresholds.contains_key(over))
+                .map(|_| Fault::UnfedMeasure {
+                    path: file.to_owned(),
+                    rule: rule.id.clone(),
+                    kind: kind.clone(),
+                    measure: *measure,
+                    lacking: Lacking::Threshold(over.clone()),
+                });
+            unknown.into_iter().chain(suffix).chain(threshold)
+        })
+        .collect()
+}
+
 fn judged<'a>(rule: &'a Rule, file: &'a Path, declared: &'a BTreeMap<&Kind, &Profile>) -> Vec<Fault> {
     let Check::Profile(ProfileSpec { kinds, aspect }) = &rule.check else {
-        return Vec::new();
+        return measured(rule, file, declared);
     };
     kinds
         .iter()

@@ -125,6 +125,18 @@ impl Profile {
     }
 }
 
+impl Profile {
+    /// The profile with the thresholds a project overrides in place of its own; a name it does not declare is left.
+    #[must_use]
+    pub fn tuned(mut self, overrides: &BTreeMap<String, u32>) -> Self {
+        self.thresholds
+            .iter_mut()
+            .filter_map(|(name, number)| overrides.get(name).map(|over| (number, over)))
+            .for_each(|(number, over)| *number = *over);
+        self
+    }
+}
+
 impl TryFrom<Profiled> for ProfileSpec {
     type Error = Invalid;
 

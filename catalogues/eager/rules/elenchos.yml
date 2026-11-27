@@ -44,3 +44,59 @@
       - "x = 1  # PRAGMA: NO COVER"
       - "x = 1  #pragma no cover"
       - "if TYPE_CHECKING:  # pragma:no cover\n    from a import b\n"
+
+- id: elenchos.no-ghost-skip
+  message: "a red is never hidden: no skip, xfail or importorskip; a test that cannot run errors"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  scope:
+    include: ["tests/**/*.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`(pytest\.(mark\.)?(skip|skipif|xfail|importorskip)|unittest\.skip)`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        pytest.mark.xfail: {msg: "a red is never hidden: fix the code or the expectation"}
+        pytest.xfail: {msg: "a red is never hidden: fix the code or the expectation"}
+        pytest.mark.skip: {msg: "a red is never hidden: a tier that cannot run errors"}
+        pytest.mark.skipif: {msg: "a red is never hidden: a tier that cannot run errors"}
+        pytest.skip: {msg: "a red is never hidden: a tier that cannot run errors"}
+        pytest.importorskip: {msg: "a red is never hidden: a missing dependency is an error"}
+        unittest.skip: {msg: "a red is never hidden: a tier that cannot run errors"}
+  fix: {safety: none, reason: "whether the test is fixed, rewritten or deleted is the author's"}
+  cases:
+    valid:
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\n\n@pytest.mark.parametrize('n', [1, 2])\ndef test_run(n: int) -> None:\n    assert n\n"
+    invalid:
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\n\ndef test_run() -> None:\n    pytest.skip('later')\n"
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\n\n@pytest.mark.xfail\ndef test_run() -> None: ...\n"
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\nlib = pytest.importorskip('lib')\n"
+
+- id: elenchos.mocker-only
+  message: "mock through the `mocker` fixture of pytest-mock, never `unittest.mock`"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  scope:
+    include: ["tests/**/*.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`unittest\.mock`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        unittest.mock: {msg: "use the `mocker` fixture of pytest-mock"}
+  fix: {safety: none, reason: "the fixture that carries the patch, and what it patches, is the author's"}
+  cases:
+    valid:
+      - path: tests/unit/test_run.py
+        code: "def test_run(mocker) -> None:\n    mocker.patch('pkg.run')\n"
+    invalid:
+      - path: tests/unit/test_run.py
+        code: "from unittest.mock import patch\n"
+      - path: tests/unit/test_run.py
+        code: "from unittest import mock\n"

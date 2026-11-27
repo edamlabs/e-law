@@ -342,3 +342,55 @@
       - "import logging\n\nlogger = logging.getLogger(__name__)\n\n\ndef run(name: str) -> None:\n    logger.info('hello', extra={'name': name})\n"
     invalid:
       - "import logging\n\nlogger = logging.getLogger(__name__)\n\n\ndef run(name: str) -> None:\n    logger.info(f'hello {name}')\n"
+
+- id: banks.no-os-environ
+  message: "config is read once, at the composition root, through pydantic-settings: never `os.environ` or `os.getenv`"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`os\.(environ|getenv)`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        os.environ: {msg: "read config through pydantic-settings, at the composition root only"}
+        os.getenv: {msg: "read config through pydantic-settings, at the composition root only"}
+  fix: {safety: none, reason: "the setting that replaces the environment read, and where it is declared, is the author's"}
+  cases:
+    valid:
+      - path: src/pkg/infra/config.py
+        code: "import os\n\nhome = os.path.expanduser('~')\n"
+    invalid:
+      - path: src/pkg/api/routes.py
+        code: "import os\n\nhome = os.environ['HOME']\n"
+      - path: src/pkg/api/routes.py
+        code: "import os\n\nhome = os.getenv('HOME')\n"
+
+- id: banks.no-stdlib-logging
+  message: "one logger: `logger` of infra/logger, structlog's; never the standard library's `logging`"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py"]
+    exclude: ["src/*/infra/logger.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`logging`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        logging: {msg: "log through `logger` of infra/logger"}
+  fix: {safety: none, reason: "the event name and its fields replace the message string, and only the author knows them"}
+  cases:
+    valid:
+      - path: src/pkg/api/routes.py
+        code: "from pkg.infra.logger import logger\n\nlogger.info('route.served')\n"
+      - path: src/pkg/infra/logger.py
+        code: "import logging\n\nroot = logging.getLogger()\n"
+    invalid:
+      - path: src/pkg/api/routes.py
+        code: "import logging\n\nlog = logging.getLogger(__name__)\n"
+      - path: src/pkg/api/routes.py
+        code: "from logging import getLogger\n"

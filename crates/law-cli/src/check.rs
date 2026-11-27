@@ -16,6 +16,7 @@ use crate::project::Opened;
 const PASSES: usize = 10;
 const CENSUS: &str = "members:";
 const PROFILE: &str = "profile:";
+const METRIC: &str = "metric:";
 const TIME: &str = "time:";
 const GRAPH: &str = "graph:";
 const PROBE: &str = "probe";
@@ -61,6 +62,9 @@ impl CheckArgs {
         unresolved.sort_by(|(a, (_, x)), (b, (_, y))| y.cmp(x).then_with(|| a.cmp(b)));
         for (name, (why, count)) in unresolved {
             let _ = writeln!(err, "{CENSUS} unresolved: {name} \u{d7}{count} ({why})");
+        }
+        if let Some(metric) = census.metric {
+            let _ = writeln!(err, "{METRIC} {} modules measured", metric.modules);
         }
         if let Some(profile) = census.profile {
             let _ = writeln!(

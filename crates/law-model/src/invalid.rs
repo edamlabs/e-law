@@ -32,9 +32,11 @@ pub enum Refusal {
     BadCase,
     /// Entries that set neither or both of `beside` and `glob`.
     BadEntries,
+    /// A setting holding a null, which TOML cannot write.
+    BadSetting,
 }
 
-const ALL: [Refusal; 14] = [
+const ALL: [Refusal; 15] = [
     Refusal::BadId,
     Refusal::BadCode,
     Refusal::BadKind,
@@ -49,6 +51,7 @@ const ALL: [Refusal; 14] = [
     Refusal::EmptyKinds,
     Refusal::BadCase,
     Refusal::BadEntries,
+    Refusal::BadSetting,
 ];
 
 /// A value a validated type refused, and why.
@@ -80,6 +83,7 @@ impl Refusal {
             Self::EmptyKinds => "empty-kinds",
             Self::BadCase => "bad-case",
             Self::BadEntries => "bad-entries",
+            Self::BadSetting => "bad-setting",
         }
     }
 }

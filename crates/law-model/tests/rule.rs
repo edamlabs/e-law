@@ -380,3 +380,66 @@ fn rule_formerly_refuses_what_is_not_one_lowercase_word() {
     }
     assert!(refused(with("formerly", json!("object-annotation"))));
 }
+
+fn ruff(settings: &Value) -> Result<Rule, serde_json::Error> {
+    serde_json::from_value(with(
+        "check",
+        json!({"engine": "ruff", "code": "TID251", "settings": settings}),
+    ))
+}
+
+#[test]
+fn rule_ruff_settings_render_as_one_inline_toml_override_per_key_in_key_order() -> Outcome {
+    let rule = ruff(&json!({
+        "lint.flake8-tidy-imports.banned-api": {"os.environ": {"msg": "say \"no\"\n"}, "os.getenv": {"msg": "m"}},
+        "line-length": 100,
+        "lint.select": ["E", "F"],
+        "lint.preview": true,
+        "lint.ratio": 1.5,
+    }))?;
+    let Check::Ruff(spec) = rule.check else {
+        return Err("not a ruff check".into());
+    };
+    assert_eq!(
+        spec.overrides(),
+        [
+            "line-length = 100",
+            "lint.flake8-tidy-imports.banned-api = {\"os.environ\" = {\"msg\" = \"say \\\"no\\\"\\n\"}, \"os.getenv\" = {\"msg\" = \"m\"}}",
+            "lint.preview = true",
+            "lint.ratio = 1.5",
+            "lint.select = [\"E\", \"F\"]",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn rule_ruff_settings_absent_render_nothing_and_are_not_written_back() -> Outcome {
+    let rule: Rule = serde_json::from_value(with("check", json!({"engine": "ruff", "code": "T201"})))?;
+    let Check::Ruff(spec) = &rule.check else {
+        return Err("not a ruff check".into());
+    };
+    assert!(spec.overrides().is_empty());
+    assert!(serde_json::to_value(&rule)?["check"].get("settings").is_none());
+    Ok(())
+}
+
+#[test]
+fn rule_ruff_settings_holding_a_null_anywhere_are_refused() {
+    for settings in [
+        json!({"k": null}),
+        json!({"k": [1, null]}),
+        json!({"k": {"a": {"b": null}}}),
+    ] {
+        assert!(ruff(&settings).is_err(), "{settings}");
+    }
+}
+
+#[test]
+fn rule_ruff_settings_round_trip_through_serde() -> Outcome {
+    let settings = json!({"k": {"a": [1, "x", {"b": false}]}});
+    let rule = ruff(&settings)?;
+    assert_eq!(serde_json::to_value(&rule)?["check"]["settings"], settings);
+    assert_eq!(serde_json::from_value::<Rule>(serde_json::to_value(&rule)?)?, rule);
+    Ok(())
+}

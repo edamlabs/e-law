@@ -6,8 +6,8 @@ use std::sync::Arc;
 use ast_grep_language::{LanguageExt, SupportLang};
 use law_config::{Loaded, Selection};
 use law_model::{
-    Case, CaseKind, Check, Finding, FixPolicy, FixedCase, Glob, Kind, Need, Profile, Rule, Safety, Snippet, Trial,
-    Trials, Untested,
+    Case, CaseKind, Check, Finding, FixPolicy, FixedCase, Glob, Kind, MetricSpec, Need, Profile, ProfileSpec, Rule,
+    Safety, Snippet, Trial, Trials, Untested,
 };
 
 use crate::ancestry::Ancestry;
@@ -256,8 +256,8 @@ impl Proven {
 impl TrialRunner {
     fn homes(rule: &Rule, profiles: &BTreeMap<Kind, Profile>) -> Option<Vec<Glob>> {
         match &rule.check {
-            Check::Profile(spec) => Some(
-                spec.kinds
+            Check::Profile(ProfileSpec { kinds, .. }) | Check::Metric(MetricSpec { kinds, .. }) => Some(
+                kinds
                     .iter()
                     .filter_map(|kind| profiles.get(kind))
                     .flat_map(|profile| profile.home.iter().cloned())

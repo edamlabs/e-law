@@ -32,6 +32,13 @@ pub struct Profiled {
     pub skipped: usize,
 }
 
+/// How many modules the `metric` engine measured: those in the home of a kind a metric rule names and in its scope.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Measured {
+    /// The modules measured.
+    pub modules: usize,
+}
+
 /// How many classes the `members` engine judged, how many it skipped — neither lineage nor order judged — for a base
 /// it could not resolve and why, how many of the judged stand on a builtin base other than `object`, and how many modules the resolver
 /// read from the project's roots and from foreign ones.
@@ -51,6 +58,8 @@ pub struct Census {
     pub unresolved: BTreeMap<String, (Unresolved, usize)>,
     /// The entity classes the `profile` engine walked the line of; none when the run has no `profile` rule.
     pub profile: Option<Profiled>,
+    /// The modules the `metric` engine measured; none when the run has no `metric` rule.
+    pub metric: Option<Measured>,
 }
 
 impl fmt::Display for Unresolved {
@@ -83,6 +92,12 @@ impl AddAssign for Profiled {
     }
 }
 
+impl AddAssign for Measured {
+    fn add_assign(&mut self, other: Self) {
+        self.modules += other.modules;
+    }
+}
+
 impl AddAssign for Census {
     fn add_assign(&mut self, other: Self) {
         self.judged += other.judged;
@@ -96,6 +111,9 @@ impl AddAssign for Census {
             .for_each(|(name, (why, count))| self.unresolved.entry(name).or_insert((why, 0)).1 += count);
         if let Some(other) = other.profile {
             *self.profile.get_or_insert_default() += other;
+        }
+        if let Some(other) = other.metric {
+            *self.metric.get_or_insert_default() += other;
         }
     }
 }
