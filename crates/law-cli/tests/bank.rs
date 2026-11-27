@@ -13,6 +13,7 @@ const BANK: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../law-engine/src/built
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 const GENERATOR: &str = "scripts/builtins.py";
 const HEADS: [&str; 6] = ["aliases", "classes", "factories", "platform", "python", "wrappers"];
+const CAP: usize = 20;
 const OBJECT: &str = "builtins.object";
 
 type Fault = Box<dyn std::error::Error>;
@@ -40,6 +41,30 @@ fn interpreter(version: &str) -> Option<PathBuf> {
     python.is_file().then_some(python)
 }
 
+fn drift(fresh: &str, kept: &str) -> Result<String, Fault> {
+    let (fresh, kept): (Value, Value) = (serde_json::from_str(fresh)?, serde_json::from_str(kept)?);
+    let (fresh, kept) = (classes(&fresh)?.clone(), classes(&kept)?.clone());
+    let only = |side: &serde_json::Map<String, Value>, other: &serde_json::Map<String, Value>| -> Vec<String> {
+        side.keys()
+            .filter(|key| !other.contains_key(*key))
+            .take(CAP)
+            .cloned()
+            .collect()
+    };
+    let changed: Vec<&String> = fresh
+        .keys()
+        .filter(|key| kept.get(*key).is_some_and(|entry| entry != &fresh[*key]))
+        .take(CAP)
+        .collect();
+    Ok(format!(
+        "the bank differs from what scripts/builtins.py writes: {} classes fresh, {} kept; only fresh {:?}; only kept {:?}; changed {changed:?}",
+        fresh.len(),
+        kept.len(),
+        only(&fresh, &kept),
+        only(&kept, &fresh),
+    ))
+}
+
 #[test]
 fn bank_embedded_file_has_the_shape_the_engine_decodes() -> Outcome {
     let bank = bank()?;
@@ -59,7 +84,7 @@ fn bank_embedded_file_has_the_shape_the_engine_decodes() -> Outcome {
         bank["python"]
     );
     let classes = classes(&bank)?;
-    assert!(classes.len() > 500, "{} classes", classes.len());
+    assert_eq!(classes.len(), 354);
     for (key, entry) in classes {
         let fields: BTreeSet<&str> = entry
             .as_object()
@@ -211,13 +236,12 @@ fn bank_embedded_decodes_and_is_not_empty_through_a_check() -> Outcome {
 }
 
 #[test]
-fn bank_regenerates_byte_identical_from_its_generator() -> Outcome {
+fn bank_regenerates_byte_identical_from_its_generator_whatever_the_build() -> Outcome {
     let kept = fs::read_to_string(BANK)?;
     let version = serde_json::from_str::<Value>(&kept)?["python"]
         .as_str()
         .ok_or("no python")?
         .to_owned();
-    // The bank names the interpreter it came from; regeneration is deliberate, never "any 3.14".
     let Some(python) = interpreter(&version) else {
         writeln!(io::stderr(), "SKIP: uv-managed python {version} cannot be found")?;
         return Ok(());
@@ -236,6 +260,6 @@ fn bank_regenerates_byte_identical_from_its_generator() -> Outcome {
         serde_json::from_str::<Value>(&kept)?["python"],
         "the bank was generated from another interpreter"
     );
-    assert!(fresh == kept, "the bank differs from what scripts/builtins.py writes");
+    assert!(fresh == kept, "{}", drift(&fresh, &kept)?);
     Ok(())
 }

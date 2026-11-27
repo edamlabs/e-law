@@ -1,5 +1,6 @@
-"""The bank of the interpreter's own classes: what `builtins`, every fileless stdlib module and the few stdlib modules
-whose classes a lone file bases on bind, and every class in their lines, read off a live interpreter. Regenerate: `uv run --no-project --python 3.14 python scripts/builtins.py > crates/law-engine/src/builtins.json`."""
+"""The bank of the interpreter's own classes: what the closed list of modules below binds, and every class in their
+lines, read off a live interpreter. The list is written, never scanned, so the bank follows the interpreter's version
+and not the build it came from. Regenerate: `uv run --no-project --python 3.14 python scripts/builtins.py > crates/law-engine/src/builtins.json`."""
 
 import collections.abc
 import importlib
@@ -13,7 +14,6 @@ from types import ModuleType
 from typing import Final
 
 STDLIB: Final[Path] = Path(sysconfig.get_path("stdlib"))
-DYNLOAD: Final[Path] = Path(sysconfig.get_path("platstdlib")) / "lib-dynload"
 PACKAGE: Final[str] = "__init__"
 SOURCE: Final[str] = ".py"
 FACTORIES: Final[dict[str, list[str]]] = {
@@ -25,15 +25,25 @@ FACTORIES: Final[dict[str, list[str]]] = {
 WRAPPERS: Final[list[str]] = ["typing._CallableType", "typing._DeprecatedGenericAlias", "typing._TupleType", "typing._alias"]
 ANCHORS: Final[tuple[ModuleType, ...]] = (collections.abc, typing)
 ABSTRACT: Final[str] = "__isabstractmethod__"
-WRITTEN: Final[tuple[str, ...]] = ("abc", "collections.abc", "contextlib", "dataclasses", "enum", "typing")
-
-
-def loaded(name: str) -> ModuleType | None:
-    """The module of a name, or None when this interpreter cannot import it."""
-    try:
-        return importlib.import_module(name)
-    except ImportError:
-        return None
+MODULES: Final[tuple[str, ...]] = (
+    "_collections",
+    "_contextvars",
+    "_functools",
+    "_io",
+    "_thread",
+    "_types",
+    "_typing",
+    "_weakref",
+    "abc",
+    "builtins",
+    "collections.abc",
+    "contextlib",
+    "dataclasses",
+    "enum",
+    "itertools",
+    "typing",
+)
+ALIASED: Final[tuple[str, ...]] = ("_frozen_importlib", "_frozen_importlib_external", "collections.abc", "os.path")
 
 
 def written(module: ModuleType) -> str | None:
@@ -54,8 +64,7 @@ def entry(cls: type, keys: dict[int, str]) -> dict[str, list[str]]:
     } | ({"abstract": pending} if pending else {})
 
 
-names = sorted({*sys.builtin_module_names, *(path.name.split(".")[0] for path in DYNLOAD.glob("*.so")), *WRITTEN})
-modules = {name: module for name in names if (module := loaded(name)) is not None}
+modules = {name: importlib.import_module(name) for name in MODULES}
 bound = sorted(
     (f"{name}.{key}", value)
     for name, module in modules.items()
@@ -65,7 +74,7 @@ bound = sorted(
 keys = {id(value): key for key, value in reversed(bound)}
 ancestors = {f"{base.__module__}.{base.__qualname__}": base for _, value in bound for base in value.__mro__ if id(base) not in keys}
 classes = {key: entry(value, keys) for key, value in [*ancestors.items(), *bound]}
-aliases = {name: file for name, module in sys.modules.items() if (file := written(module)) not in (None, name)}
+aliases = {name: file for name in ALIASED if (file := written(importlib.import_module(name))) not in (None, name)}
 head = {
     "aliases": dict(sorted(aliases.items())),
     "factories": FACTORIES,
