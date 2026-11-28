@@ -21,6 +21,7 @@ mod pattern;
 mod plan;
 mod pragma;
 mod profile;
+mod relocate;
 mod reserved;
 mod run;
 mod scope;

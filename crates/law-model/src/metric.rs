@@ -22,6 +22,15 @@ pub enum Measure {
     Methods,
 }
 
+/// The move a `metric` rule's fix makes of a module that is over its measure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Relocation {
+    /// The module becomes a package: `<dir>/<name>.py` moves to `<dir>/<name>/<kind>.py`, `<kind>` the kind whose
+    /// home the module sits in; every import of it follows.
+    Package,
+}
+
 /// A `metric` check as written: the spec before it is checked.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -34,6 +43,9 @@ pub struct Metered {
     /// The name of the profile threshold the count may not pass.
     #[schemars(length(min = 1))]
     pub over: String,
+    /// The move the rule's fix makes; a rule with a `safe` or `unsafe` fix names it, a rule with none does not.
+    #[serde(default)]
+    pub relocate: Option<Relocation>,
 }
 
 /// What a `metric` rule judges: a count over every module in the homes of its kinds, against the threshold of the
@@ -49,6 +61,9 @@ pub struct MetricSpec {
     /// The name of the profile threshold the count may not pass.
     #[schemars(length(min = 1))]
     pub over: String,
+    /// The move the rule's fix makes; a rule with a `safe` or `unsafe` fix names it, a rule with none does not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relocate: Option<Relocation>,
 }
 
 impl Measure {
@@ -84,7 +99,17 @@ impl TryFrom<Metered> for MetricSpec {
                 Refusal::EmptyText,
                 "a metric check names the threshold it is over",
             )),
-            Metered { kinds, measure, over } => Ok(Self { kinds, measure, over }),
+            Metered {
+                kinds,
+                measure,
+                over,
+                relocate,
+            } => Ok(Self {
+                kinds,
+                measure,
+                over,
+                relocate,
+            }),
         }
     }
 }

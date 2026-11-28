@@ -10,7 +10,7 @@ use ast_grep_language::{LanguageExt, SupportLang};
 use jiff::Timestamp;
 use jiff::civil::Date;
 use law_config::{Loaded, Selection};
-use law_model::{Catalogue, Former, Report, RuleId, Stamp, Tags, Version};
+use law_model::{Catalogue, Former, Report, RuleId, Safety, Stamp, Tags, Version};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -27,6 +27,7 @@ use crate::graph::GraphEngine;
 use crate::outline::Outline;
 use crate::plan::Plan;
 use crate::pragma::PragmaEngine;
+use crate::relocate::{Relocation, Relocator};
 use crate::reserved::{Reserved, ReservedRule};
 use crate::scope::ScopeMatcher;
 use crate::source::Source;
@@ -51,6 +52,7 @@ pub struct Run {
     files: Vec<Box<dyn FileEngine>>,
     tree: TreeEngine,
     graph: GraphEngine,
+    relocator: Relocator,
     batch: Vec<Box<dyn BatchEngine>>,
     external: BTreeMap<RuleId, ScopeMatcher>,
     ledger: ExceptionLedger,
@@ -76,8 +78,11 @@ pub struct Outcome {
     pub faults: Vec<Fault>,
     /// The classes the `members` engine judged and skipped.
     pub census: Census,
-    /// The import graph's extent, when a `graph` rule ran.
+    /// The import graph's extent, when a `graph` rule ran or a fix moves modules.
     pub graph: Option<Extent>,
+    /// The fixes that could not be made, each with its safety: a module that cannot be moved with every import of it
+    /// rewritten exactly. A fault only to whoever asked for fixes of that safety.
+    pub declined: Vec<(Safety, Fault)>,
     /// The phases, in the order they ended.
     pub timings: Vec<Timing>,
 }
@@ -135,7 +140,7 @@ impl Run {
             .map(AsRef::as_ref)
             .filter(|engine| engine.admits(path))
             .collect();
-        let outlined = self.graph.judges() && self.ancestry.named(path).is_some();
+        let outlined = self.drawn() && self.ancestry.named(path).is_some();
         if engines.is_empty() && !outlined {
             return (sink, Vec::new());
         }
@@ -160,6 +165,10 @@ impl Run {
         }
     }
 
+    fn drawn(&self) -> bool {
+        self.graph.judges() || !self.relocator.is_empty()
+    }
+
     fn outlined(root: &Path, path: &Path) -> Result<Arc<Outline>, Fault> {
         let text = Self::read(root, path)?;
         let tree = SupportLang::Python.ast_grep(&text);
@@ -173,6 +182,7 @@ impl Run {
         explicit: bool,
         mut outlines: Vec<Arc<Outline>>,
         sink: &mut Sink,
+        declined: &mut Vec<(Safety, Fault)>,
     ) -> Extent {
         let walked: HashSet<&Path> = files.iter().map(PathBuf::as_path).collect();
         if explicit {
@@ -198,6 +208,24 @@ impl Run {
         self.graph.check(&graph, explicit.then_some(&walked), &mut found);
         found.findings.retain(|finding| walked.contains(finding.path.as_path()));
         sink.absorb(found);
+        let read = |path: &Path| fs::read_to_string(root.join(path)).ok();
+        let relocation = Relocation {
+            graph: &graph,
+            ancestry: &self.ancestry,
+            read: &read,
+        };
+        declined.extend(
+            self.relocator
+                .attach(&relocation, &mut sink.findings)
+                .into_iter()
+                .map(|refused| {
+                    let fault = Fault::Unmovable {
+                        path: refused.path,
+                        why: refused.why.to_string(),
+                    };
+                    (refused.safety, fault)
+                }),
+        );
         graph.extent()
     }
 
@@ -342,6 +370,7 @@ impl Run {
                 let profiled = !plan.profile.is_empty();
                 let metered = !plan.metric.is_empty();
                 let ancestry = Arc::new(Ancestry::new(&loaded.project.root, &config.roots, environment));
+                let relocator = plan.relocator();
                 let (mut files, tree, graph) = plan.engines(Arc::clone(&ancestry), &loaded.project.root);
                 files.push(Box::new(PragmaEngine::new(&loaded.catalogues)));
                 Ok(Self {
@@ -352,6 +381,7 @@ impl Run {
                     files,
                     tree,
                     graph,
+                    relocator,
                     batch,
                     external,
                     ledger,
@@ -401,10 +431,10 @@ impl Run {
         });
         sink.absorb(batch);
         let started = Instant::now();
+        let mut declined = Vec::new();
         let graph = self
-            .graph
-            .judges()
-            .then(|| self.graphed(&root, &walk.files, explicit, outlines, &mut sink));
+            .drawn()
+            .then(|| self.graphed(&root, &walk.files, explicit, outlines, &mut sink, &mut declined));
         if graph.is_some() {
             timings.push(Timing::new(GRAPH, started.elapsed()));
         }
@@ -464,6 +494,7 @@ impl Run {
             faults,
             census,
             graph,
+            declined,
             timings,
         }
     }

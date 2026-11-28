@@ -52,7 +52,7 @@ pub use id::{Former, RuleId};
 pub use invalid::{Invalid, Refusal};
 pub use members::{Lineage, MembersSpec, Order};
 pub use message::Message;
-pub use metric::{Measure, MetricSpec};
+pub use metric::{Measure, MetricSpec, Relocation};
 pub use parity::{Entered, Entries, Names, Of, ParitySpec, Relation};
 pub use pattern::PatternSpec;
 pub use profile::{Aspect, Kind, Profile, ProfileSpec};

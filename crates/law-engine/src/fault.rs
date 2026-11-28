@@ -99,6 +99,14 @@ pub enum Fault {
         /// The path.
         path: PathBuf,
     },
+    /// A module a fix would move, which cannot be moved with every import of it rewritten exactly.
+    #[error("{}: not moved: {why}", path.display())]
+    Unmovable {
+        /// The module.
+        path: PathBuf,
+        /// Why not.
+        why: String,
+    },
     /// A fix that could not be applied.
     #[error(transparent)]
     Fix(law_fix::Fault),
@@ -146,6 +154,10 @@ impl Rooted for Fault {
             Self::Io { path, message } => Self::Io {
                 path: path.rooted(root),
                 message,
+            },
+            Self::Unmovable { path, why } => Self::Unmovable {
+                path: path.rooted(root),
+                why,
             },
             Self::Fix(fault) => Self::Fix(fault.rooted(root)),
             other => other,

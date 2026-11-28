@@ -348,7 +348,10 @@ fn resolve(project: &Project, source: &Source, builtins: Builtins<'_>) -> Result
 }
 
 fn measured(rule: &Rule, file: &Path, declared: &BTreeMap<&Kind, &Profile>) -> Vec<Fault> {
-    let Check::Metric(MetricSpec { kinds, measure, over }) = &rule.check else {
+    let Check::Metric(MetricSpec {
+        kinds, measure, over, ..
+    }) = &rule.check
+    else {
         return Vec::new();
     };
     kinds

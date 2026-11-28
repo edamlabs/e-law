@@ -56,3 +56,12 @@ pub fn tree(files: &[(&str, &[u8])]) -> Result<TempDir, Box<dyn std::error::Erro
 pub fn read(dir: &Path, name: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok(fs::read_to_string(dir.join(name))?)
 }
+
+pub fn relocate(rule: &str, from: &str, to: &str, edits: &[Value]) -> Result<Finding, Box<dyn std::error::Error>> {
+    let all: Vec<Value> = edits
+        .iter()
+        .cloned()
+        .chain([json!({"edit": "move", "from": from, "to": to})])
+        .collect();
+    finding(rule, from, "unsafe", &all)
+}

@@ -206,7 +206,7 @@ fn catalogue_refuses_unknown_field_in_every_nested_level() -> Outcome {
     for (name, body) in [
         ("scope", "  scope: {include: [\"a/*.py\"], extra: 1}\n"),
         ("cases", "  cases: {valid: [], extra: []}\n"),
-        ("fixed", "  cases: {fixed: [{code: x, expect: y, extra: 1}]}\n"),
+        ("fixed", "  cases: {fixed: [{code: x, expect: z, extra: 1}]}\n"),
     ] {
         let faults = faults_of(&bad(&format!("{body}{CHECK}{FIX}")))?;
         assert!(
@@ -415,6 +415,51 @@ fn catalogue_prose_refuses_an_unknown_field_and_a_missing_text_or_tags() -> Outc
         ("a text that is not text", "[[prose]]\ntags = {law = \"1\"}\ntext = 3\n"),
     ] {
         assert!(with_prose(prose)?.is_err(), "{name}");
+    }
+    Ok(())
+}
+
+fn fixed_rule(fixed: &str) -> String {
+    bad(&format!("{CHECK}{FIX}  cases:\n    fixed:\n{fixed}"))
+}
+
+#[test]
+fn catalogue_fixed_case_is_a_snippet_or_files_with_the_same_shape_expected() -> Outcome {
+    let tmp = tempfile::tempdir()?;
+    let dir = manifest(tmp.path(), "c")?;
+    let both = fixed_rule(
+        "      - {path: a.py, code: x, expect: z}\n      - files: {a.py: x, b.py: y}\n        expect: {c.py: x, b.py: y}\n",
+    );
+    write(tmp.path(), "c/rules/x.yml", &both)?;
+    let loaded = catalogue(&dir).map_err(|faults| format!("{faults:?}"))?;
+    let rule = loaded.rules.first().ok_or("no rule")?;
+    assert_eq!(rule.cases.fixed.len(), 2);
+    let json = serde_json::to_value(&rule.cases.fixed)?;
+    assert_eq!(json[0], serde_json::json!({"path": "a.py", "code": "x", "expect": "z"}));
+    assert_eq!(
+        json[1],
+        serde_json::json!({"files": {"a.py": "x", "b.py": "y"}, "expect": {"b.py": "y", "c.py": "x"}})
+    );
+    let back: Vec<law_model::FixedCase> = serde_json::from_value(json)?;
+    assert_eq!(back, rule.cases.fixed);
+    Ok(())
+}
+
+#[test]
+fn catalogue_refuses_a_fixed_case_whose_shapes_disagree() -> Outcome {
+    for fixed in [
+        "      - {code: x, expect: {a.py: y}}\n",
+        "      - {files: {a.py: x}, expect: z}\n",
+        "      - {files: {a.py: x}, code: x, expect: {a.py: y}}\n",
+        "      - {path: a.py, files: {a.py: x}, expect: {a.py: y}}\n",
+        "      - {files: {}, expect: {}}\n",
+        "      - {expect: z}\n",
+    ] {
+        let faults = faults_of(&fixed_rule(fixed))?;
+        assert!(
+            faults.len() == 1 && format!("{faults:?}").contains("BadCase"),
+            "{fixed}: {faults:?}"
+        );
     }
     Ok(())
 }

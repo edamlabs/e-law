@@ -1,11 +1,11 @@
 use std::io::{self, Write};
 use std::ops::ControlFlow;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use jiff::{Timestamp, ZonedDateTime};
 use law_engine::{Census, Environment, Extent, Fault, Outcome, Run, Timing};
-use law_model::{Safety, Severity};
+use law_model::{Edit, Finding, Safety, Severity};
 use law_report::Tally;
 
 use crate::cli::CheckArgs;
@@ -23,6 +23,23 @@ const PROBE: &str = "probe";
 const MILLIS: f64 = 1000.0;
 
 impl CheckArgs {
+    fn followed(root: &Path, paths: &mut [PathBuf], applied: &[Finding]) {
+        let moves: Vec<(&PathBuf, &PathBuf)> = applied
+            .iter()
+            .filter_map(|finding| finding.fix.as_ref())
+            .flat_map(|fix| &fix.edits)
+            .filter_map(|edit| match edit {
+                Edit::Move { from, to } => Some((from, to)),
+                Edit::Replace { .. } | Edit::Create { .. } => None,
+            })
+            .collect();
+        for path in paths.iter_mut() {
+            if let Some((_, to)) = moves.iter().find(|(from, _)| root.join(from) == *path) {
+                *path = root.join(to);
+            }
+        }
+    }
+
     fn fixed(&self, run: &Run, opened: &Opened, paths: &[PathBuf], at: Timestamp) -> (Outcome, usize, Vec<Fault>) {
         let allow = if self.unsafe_fixes {
             Safety::Unsafe
@@ -31,22 +48,31 @@ impl CheckArgs {
         };
         let mut fixed = 0;
         let mut faults = Vec::new();
+        let mut paths = paths.to_vec();
         let last = (0..PASSES).try_for_each(|_| {
-            let outcome = run.check(paths, at);
+            let outcome = run.check(&paths, at);
             let applied = law_fix::apply(opened.root(), &outcome.report.findings, allow);
             fixed += applied.fixed.len();
+            Self::followed(opened.root(), &mut paths, &applied.fixed);
             let failed = !applied.faults.is_empty();
             faults.extend(applied.faults.into_iter().map(Fault::Fix));
             match (applied.fixed.is_empty(), failed) {
                 (true, _) => ControlFlow::Break(outcome),
-                (false, true) => ControlFlow::Break(run.check(paths, at)),
+                (false, true) => ControlFlow::Break(run.check(&paths, at)),
                 (false, false) => ControlFlow::Continue(()),
             }
         });
         let outcome = match last {
             ControlFlow::Break(outcome) => outcome,
-            ControlFlow::Continue(()) => run.check(paths, at),
+            ControlFlow::Continue(()) => run.check(&paths, at),
         };
+        faults.extend(
+            outcome
+                .declined
+                .iter()
+                .filter(|(safety, _)| *safety <= allow)
+                .map(|(_, fault)| fault.clone()),
+        );
         (outcome, fixed, faults)
     }
 

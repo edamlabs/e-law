@@ -13,6 +13,7 @@ use crate::metric::{MetricEngine, MetricRule};
 use crate::parity::{ParityEngine, ParityRule};
 use crate::pattern::{PatternEngine, PatternRule};
 use crate::profile::{ProfileEngine, ProfileRule};
+use crate::relocate::Relocator;
 use crate::scope::ScopeMatcher;
 use crate::shape::{ShapeEngine, ShapeRule};
 use crate::tree::{TreeEngine, TreeRule};
@@ -55,10 +56,9 @@ impl Plan {
                     self.profile.push(ProfileRule::new(rule, spec, scope, profiles));
                     Ok(())
                 }
-                Check::Metric(spec) => {
-                    self.metric.push(MetricRule::new(rule, spec, scope, profiles));
-                    Ok(())
-                }
+                Check::Metric(spec) => MetricRule::new(rule, spec, scope, profiles)
+                    .map(|planned| self.metric.push(planned))
+                    .map_err(|fault| vec![fault]),
                 Check::Graph(spec) => {
                     self.graph.push(GraphRule::new(rule, spec, scope));
                     Ok(())
@@ -78,6 +78,11 @@ impl Plan {
             });
         self.faults.extend(planned.err().into_iter().flatten());
         self
+    }
+
+    /// What moves the modules the metric rules find over their measure, for those whose fix does.
+    pub(crate) fn relocator(&self) -> Relocator {
+        Relocator::new(self.metric.iter().filter_map(MetricRule::relocating).collect())
     }
 
     /// The rules no batch engine checks, each a fault.

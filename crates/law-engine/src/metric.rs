@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
-use law_model::{Kind, Measure, MetricSpec, Profile, Rule};
+use law_model::{FixPolicy, Kind, Measure, MetricSpec, Profile, Rule, Safety};
 
 use crate::engine::{FileEngine, Sink};
+use crate::fault::Fault;
 use crate::outline::Outline;
+use crate::relocate::Relocating;
 use crate::scope::ScopeMatcher;
 use crate::source::Source;
 
@@ -18,6 +20,7 @@ pub struct MetricRule {
     measure: Measure,
     over: String,
     profiles: Vec<Profile>,
+    moves: Option<Safety>,
 }
 
 /// The `metric` engine: each module in the home of a rule's kinds counted for one measure, reported past the
@@ -86,10 +89,35 @@ impl MetricRule {
         }
     }
 
+    fn safety(rule: &Rule, spec: &MetricSpec) -> Result<Option<Safety>, Fault> {
+        match (&rule.fix, spec.relocate) {
+            (FixPolicy::Safe, Some(_)) => Ok(Some(Safety::Safe)),
+            (FixPolicy::Unsafe, Some(_)) => Ok(Some(Safety::Unsafe)),
+            (FixPolicy::None { .. }, None) => Ok(None),
+            _ => Err(Fault::FixMismatch { rule: rule.id.clone() }),
+        }
+    }
+
+    /// What moves the modules this rule finds over their measure, when its fix does.
+    pub(crate) fn relocating(&self) -> Option<Relocating> {
+        self.moves.map(|safety| Relocating {
+            rule: self.rule.id.clone(),
+            safety,
+            profiles: self.profiles.clone(),
+        })
+    }
+
     /// A rule measuring its kinds' modules, each kind's profile taken from those handed in.
-    #[must_use]
-    pub fn new(rule: &Rule, spec: &MetricSpec, scope: ScopeMatcher, profiles: &BTreeMap<Kind, Profile>) -> Self {
-        Self {
+    ///
+    /// # Errors
+    /// A fix policy and a `relocate` in the spec that disagree.
+    pub fn new(
+        rule: &Rule,
+        spec: &MetricSpec,
+        scope: ScopeMatcher,
+        profiles: &BTreeMap<Kind, Profile>,
+    ) -> Result<Self, Fault> {
+        Ok(Self {
             rule: rule.clone(),
             scope,
             measure: spec.measure,
@@ -100,7 +128,8 @@ impl MetricRule {
                 .filter_map(|kind| profiles.get(kind))
                 .cloned()
                 .collect(),
-        }
+            moves: Self::safety(rule, spec)?,
+        })
     }
 }
 

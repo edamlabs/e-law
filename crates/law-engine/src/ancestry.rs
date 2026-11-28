@@ -224,22 +224,38 @@ impl Ancestry {
         .map(|(path, _, _)| path)
     }
 
+    fn dotted(relative: &Path) -> String {
+        let stem = relative.with_extension("");
+        let parts: Vec<&str> = stem.iter().filter_map(|part| part.to_str()).collect();
+        parts.strip_suffix(&[PACKAGE]).unwrap_or(&parts).join(DOT)
+    }
+
     /// The dotted name of a project module at a path from the project root, by the first source root that holds it; a
     /// package's `__init__` named as the package; none outside every source root.
     pub(crate) fn named(&self, path: &Path) -> Option<String> {
-        let relative = self.roots.iter().find_map(|root| path.strip_prefix(root).ok())?;
-        let stem = relative.with_extension("");
-        let parts: Vec<&str> = stem.iter().filter_map(|part| part.to_str()).collect();
-        let parts = parts.strip_suffix(&[PACKAGE]).unwrap_or(&parts);
-        Some(parts.join(DOT))
+        self.roots
+            .iter()
+            .find_map(|root| path.strip_prefix(root).ok())
+            .map(Self::dotted)
     }
 
     /// The dotted name of a project module at a path from the project root itself, a package's `__init__` named as
     /// the package.
     pub(crate) fn spelled(path: &Path) -> String {
-        let stem = path.with_extension("");
-        let parts: Vec<&str> = stem.iter().filter_map(|part| part.to_str()).collect();
-        parts.strip_suffix(&[PACKAGE]).unwrap_or(&parts).join(DOT)
+        Self::dotted(path)
+    }
+
+    /// The name the module at `to` goes by where `written` names the module at `from`: the same source root, or the
+    /// project root itself, spells both; none when `written` is no spelling of `from`, or `to` lies outside the root.
+    pub(crate) fn respelled(&self, written: &str, from: &Path, to: &Path) -> Option<String> {
+        self.roots
+            .iter()
+            .map(PathBuf::as_path)
+            .chain([Path::new("")])
+            .find_map(|root| {
+                let name = |path: &Path| path.strip_prefix(root).ok().map(Self::dotted);
+                (name(from)? == written).then(|| name(to)).flatten()
+            })
     }
 
     fn imported(&self, outline: &Outline, bound: &str, rest: Option<&str>, seen: &mut HashSet<String>) -> Found {

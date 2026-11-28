@@ -210,7 +210,7 @@ fn apply_missing_file_is_an_io_fault() -> Outcome {
 }
 
 #[test]
-fn apply_create_and_move_are_unsupported_faults_and_touch_nothing() -> Outcome {
+fn apply_create_is_an_unsupported_fault_and_touches_nothing() -> Outcome {
     let dir = tree(&[("a.py", b"abc")])?;
     let create = finding(
         "t.c",
@@ -218,23 +218,11 @@ fn apply_create_and_move_are_unsupported_faults_and_touch_nothing() -> Outcome {
         "safe",
         &[serde_json::json!({"edit": "create", "path": "n.py", "text": "x"})],
     )?;
-    let moved = finding(
-        "t.m",
-        "a.py",
-        "safe",
-        &[serde_json::json!({"edit": "move", "from": "a.py", "to": "b.py"})],
-    )?;
-    let applied = apply(dir.path(), &[create, moved], Safety::Safe);
-    assert_eq!(applied.faults.len(), 2);
-    assert!(
-        applied
-            .faults
-            .iter()
-            .all(|fault| matches!(fault, Fault::Unsupported { .. }))
-    );
+    let applied = apply(dir.path(), &[create], Safety::Safe);
+    assert!(matches!(applied.faults.as_slice(), [Fault::Unsupported { .. }]));
     assert!(applied.fixed.is_empty());
     assert_eq!(read(dir.path(), "a.py")?, "abc");
-    assert!(!dir.path().join("n.py").exists() && !dir.path().join("b.py").exists());
+    assert!(!dir.path().join("n.py").exists());
     Ok(())
 }
 

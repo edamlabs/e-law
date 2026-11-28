@@ -20,23 +20,27 @@ use crate::graph::GraphEngine;
 use crate::outline::Outline;
 use crate::parity::ParityEngine;
 use crate::plan::Plan;
+use crate::relocate::{Relocation, Relocator};
 use crate::scope::ScopeMatcher;
 use crate::source::Source;
 
 const PASSES: usize = 10;
 const UNPROVEN: &str = "no case: an unproven rule is not a rule";
+const MIXED: &str = "a fixed case gives code and a text to expect, or files and files";
 const HOMELESS: &str = "every case sits outside the homes of its kinds: an unproven rule is not a rule";
 const ROOTS: [&str; 2] = ["src", "."];
 
 /// What proves a rule: its file engines over it alone and the resolver of their bases, forgotten before each text so
 /// every case is a world of its own; the batch engine that checks it, within its scope; the graph engine over the
 /// case's files alone, a project whose source roots are `src` then the project root; or the parity engine over the
-/// case's files alone, which are all it lists.
+/// case's files alone, which are all it lists; or the file engines and the relocator over a case's files, a project
+/// of the same roots as the graph's, the module moves of whose fixes are proven across them.
 enum Prover {
     Files(Vec<Box<dyn FileEngine>>, Arc<Ancestry>),
     Case(Arc<dyn CaseEngine>, ScopeMatcher),
     Graph(GraphEngine, Ancestry),
     Parity(ParityEngine),
+    Moved(Vec<Box<dyn FileEngine>>, Relocator, Ancestry),
 }
 
 /// A rule ready to be proven, and, for a `profile` rule, the homes of its kinds, one of which a case must sit in.
@@ -68,23 +72,55 @@ impl Proven {
         match &self.prover {
             Prover::Files(engines, ancestry) => {
                 ancestry.clear();
-                let tree = SupportLang::Python.ast_grep(text);
-                let source = Source {
-                    path,
-                    text,
-                    root: &tree,
-                };
-                engines
-                    .iter()
-                    .filter(|engine| engine.admits(path))
-                    .for_each(|engine| engine.check(&source, &mut sink));
+                Self::checked(engines, path, text, &mut sink);
             }
+            Prover::Moved(engines, ..) => Self::checked(engines, path, text, &mut sink),
             Prover::Case(engine, scope) if scope.admits(path) => engine.case(&self.rule.id, path, text, &mut sink),
             Prover::Case(..) => {}
             Prover::Graph(engine, ancestry) => Self::graphed(engine, ancestry, [(path, text)], &mut sink),
             Prover::Parity(engine) => engine.case(&[(path, text)], &mut sink),
         }
         faults.extend(sink.faults);
+        sink.findings
+    }
+
+    fn checked(engines: &[Box<dyn FileEngine>], path: &Path, text: &str, sink: &mut Sink) {
+        let tree = SupportLang::Python.ast_grep(text);
+        let source = Source {
+            path,
+            text,
+            root: &tree,
+        };
+        engines
+            .iter()
+            .filter(|engine| engine.admits(path))
+            .for_each(|engine| engine.check(&source, sink));
+    }
+
+    fn moved(
+        engines: &[Box<dyn FileEngine>],
+        relocator: &Relocator,
+        ancestry: &Ancestry,
+        files: &BTreeMap<PathBuf, String>,
+    ) -> Vec<Finding> {
+        let mut sink = Sink::default();
+        for (path, text) in files {
+            Self::checked(engines, path, text, &mut sink);
+        }
+        let outlines: Vec<Arc<Outline>> = files
+            .iter()
+            .map(|(path, text)| Arc::new(Outline::new(path, &SupportLang::Python.ast_grep(text).root())))
+            .collect();
+        let graph = Graph::new(ancestry, &outlines);
+        let read = |path: &Path| files.get(path).cloned();
+        relocator.attach(
+            &Relocation {
+                graph: &graph,
+                ancestry,
+                read: &read,
+            },
+            &mut sink.findings,
+        );
         sink.findings
     }
 
@@ -101,20 +137,16 @@ impl Proven {
         engine.check(&Graph::new(ancestry, &outlines), None, sink);
     }
 
-    fn case(&self, case: &Case, faults: &mut Vec<Fault>) -> Vec<Finding> {
-        match (&case.snippet, &self.prover) {
-            (Snippet::Code(code), _) => {
-                let path = case.path.clone().unwrap_or_else(|| self.rule.scope.sample());
-                self.findings(&path, code, faults)
-            }
-            (Snippet::Files(files), Prover::Graph(engine, ancestry)) => {
+    fn tree(&self, files: &BTreeMap<PathBuf, String>, faults: &mut Vec<Fault>) -> Vec<Finding> {
+        match &self.prover {
+            Prover::Graph(engine, ancestry) => {
                 let mut sink = Sink::default();
                 let files = files.iter().map(|(path, text)| (path.as_path(), text.as_str()));
                 Self::graphed(engine, ancestry, files, &mut sink);
                 faults.extend(sink.faults);
                 sink.findings
             }
-            (Snippet::Files(files), Prover::Parity(engine)) => {
+            Prover::Parity(engine) => {
                 let mut sink = Sink::default();
                 let files: Vec<(&Path, &str)> = files
                     .iter()
@@ -124,13 +156,24 @@ impl Proven {
                 faults.extend(sink.faults);
                 sink.findings
             }
-            (Snippet::Files(_), _) => {
+            Prover::Moved(engines, relocator, ancestry) => Self::moved(engines, relocator, ancestry, files),
+            Prover::Files(..) | Prover::Case(..) => {
                 faults.push(Fault::Unsupported {
                     rule: self.rule.id.clone(),
                     feature: Feature::Files,
                 });
                 Vec::new()
             }
+        }
+    }
+
+    fn case(&self, case: &Case, faults: &mut Vec<Fault>) -> Vec<Finding> {
+        match &case.snippet {
+            Snippet::Code(code) => {
+                let path = case.path.clone().unwrap_or_else(|| self.rule.scope.sample());
+                self.findings(&path, code, faults)
+            }
+            Snippet::Files(files) => self.tree(files, faults),
         }
     }
 
@@ -165,7 +208,10 @@ impl Proven {
             .iter()
             .chain(&cases.invalid)
             .map(|case| place(&case.path))
-            .chain(cases.fixed.iter().map(|case| place(&case.path)));
+            .chain(cases.fixed.iter().flat_map(|case| match &case.snippet {
+                Snippet::Code(_) => vec![place(&case.path)],
+                Snippet::Files(files) => files.keys().cloned().collect(),
+            }));
         !paths.any(|path| homes.iter().any(|glob| glob.matches(&path)))
     }
 
@@ -196,12 +242,39 @@ impl Proven {
         }
     }
 
+    fn mended(&self, files: &BTreeMap<PathBuf, String>, faults: &mut Vec<Fault>) -> BTreeMap<PathBuf, String> {
+        let mended = (0..PASSES).try_fold(files.clone(), |tree, _| {
+            let findings = self.tree(&tree, faults);
+            let (next, applied) = law_fix::project(&tree, &findings, Safety::Unsafe);
+            faults.extend(applied.faults.into_iter().map(Fault::Fix));
+            if applied.fixed.is_empty() {
+                ControlFlow::Break(tree)
+            } else {
+                ControlFlow::Continue(next)
+            }
+        });
+        match mended {
+            ControlFlow::Break(tree) | ControlFlow::Continue(tree) => tree,
+        }
+    }
+
     fn proof(&self, case: &FixedCase, faults: &mut Vec<Fault>) -> Option<String> {
-        let path = case.path.clone().unwrap_or_else(|| self.rule.scope.sample());
-        let text = self.fixed(&path, &case.code, faults);
-        (text != case.expect)
-            .then(|| format!("the fix gives {text:?}, expected {:?}", case.expect))
-            .or_else(|| Self::found(&self.findings(&path, &text, faults)).map(|found| format!("{found} after the fix")))
+        match (&case.snippet, &case.expect) {
+            (Snippet::Code(code), Snippet::Code(expect)) => {
+                let path = case.path.clone().unwrap_or_else(|| self.rule.scope.sample());
+                let text = self.fixed(&path, code, faults);
+                (text != *expect)
+                    .then(|| format!("the fix gives {text:?}, expected {expect:?}"))
+                    .or_else(|| {
+                        Self::found(&self.findings(&path, &text, faults)).map(|found| format!("{found} after the fix"))
+                    })
+            }
+            (Snippet::Files(files), Snippet::Files(expect)) => {
+                let tree = self.mended(files, faults);
+                (tree != *expect).then(|| format!("the fix gives {tree:?}, expected {expect:?}"))
+            }
+            _ => Some(MIXED.to_owned()),
+        }
     }
 
     fn run(&self, faults: &mut Vec<Fault>) -> Vec<Trial> {
@@ -280,6 +353,16 @@ impl TrialRunner {
                 let roots: Vec<PathBuf> = ROOTS.iter().map(PathBuf::from).collect();
                 let ancestry = Ancestry::new(Path::new(""), &roots, &Environment::default());
                 Ok(Prover::Graph(plan.engines(Arc::default(), Path::new("")).2, ancestry))
+            }
+            None if !plan.relocator().is_empty() => {
+                let roots: Vec<PathBuf> = ROOTS.iter().map(PathBuf::from).collect();
+                let ancestry = Ancestry::new(Path::new(""), &roots, &Environment::default());
+                let relocator = plan.relocator();
+                Ok(Prover::Moved(
+                    plan.engines(Arc::default(), Path::new("")).0,
+                    relocator,
+                    ancestry,
+                ))
             }
             None => {
                 let ancestry = Arc::new(Ancestry::default());

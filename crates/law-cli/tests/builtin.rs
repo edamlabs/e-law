@@ -68,19 +68,19 @@ fn failing(out: &Out, id: &str) -> bool {
 }
 
 #[test]
-fn builtin_eager_has_108_rules_by_engine() -> Outcome {
+fn builtin_eager_has_109_rules_by_engine() -> Outcome {
     let all = eager(&Project::new()?)?;
     let by: BTreeMap<&str, usize> = all.iter().fold(BTreeMap::new(), |mut by, rule| {
         *by.entry(engine_of(rule)).or_default() += 1;
         by
     });
-    assert_eq!(all.len(), 108);
+    assert_eq!(all.len(), 109);
     assert_eq!(
         by,
         BTreeMap::from([
             ("graph", 2),
             ("members", 2),
-            ("metric", 4),
+            ("metric", 5),
             ("parity", 1),
             ("pattern", 45),
             ("profile", 8),
@@ -295,7 +295,7 @@ fn builtin_eager_proves_itself_with_no_project_and_the_real_tools() -> Outcome {
     let out = Project::new()?.run_on(&path, &["test", "--catalogue", "eager"])?;
     assert_eq!(
         out.stdout,
-        "natures.declared-dependency: untested: needs a project\nnatures.layer-order: untested: needs a project\nnatures.no-forbidden-dependency: untested: needs a project\nnatures.no-cycle: untested: needs a project\nnatures.visible-dependency: untested: needs a project\nnatures.public-interface: untested: needs a project\nnatures.used-ignore: untested: needs a project\nnatures.ignore-reason: untested: needs a project\nnatures.declared-external: untested: needs a project\nnatures.no-unused-external: untested: needs a project\nnatures.declared-module-external: untested: needs a project\nnatures.no-forbidden-external: untested: needs a project\nnatures.provider-layout: untested: needs a directory\nost.logic-root: untested: needs a directory\nost.single-word-module: untested: needs a directory\nost.no-init: untested: needs a directory\nost.folder-vocabulary: untested: needs a directory\nost.no-toplevel-adapters: untested: needs a directory\nsymbolon.typed: untested: needs an environment\n\nTested 89 rules, 402 cases: 0 failed, 19 untested.\n"
+        "natures.declared-dependency: untested: needs a project\nnatures.layer-order: untested: needs a project\nnatures.no-forbidden-dependency: untested: needs a project\nnatures.no-cycle: untested: needs a project\nnatures.visible-dependency: untested: needs a project\nnatures.public-interface: untested: needs a project\nnatures.used-ignore: untested: needs a project\nnatures.ignore-reason: untested: needs a project\nnatures.declared-external: untested: needs a project\nnatures.no-unused-external: untested: needs a project\nnatures.declared-module-external: untested: needs a project\nnatures.no-forbidden-external: untested: needs a project\nnatures.provider-layout: untested: needs a directory\nost.logic-root: untested: needs a directory\nost.single-word-module: untested: needs a directory\nost.no-init: untested: needs a directory\nost.folder-vocabulary: untested: needs a directory\nost.no-toplevel-adapters: untested: needs a directory\nsymbolon.typed: untested: needs an environment\n\nTested 90 rules, 408 cases: 0 failed, 19 untested.\n"
     );
     assert_eq!((out.stderr.as_str(), out.code), ("", 0));
     Ok(())
@@ -461,7 +461,7 @@ fn builtin_flag_takes_a_directory_and_several_sources_in_order() -> Outcome {
         "- id: mine.one\n  message: m\n  check: {engine: pattern, rule: {kind: elif_clause}}\n  fix: {safety: none, reason: x}\n",
     )?;
     let both = rules(&project, &["--catalogue", "eager", "--catalogue", "mine/"])?;
-    assert_eq!(both.len(), 109);
+    assert_eq!(both.len(), 110);
     assert_eq!(both.last().map(|rule| rule["id"].clone()), Some("mine.one".into()));
     let only_mine = rules(&project, &["--catalogue", "./mine"])?;
     assert_eq!(only_mine.len(), 1);
@@ -474,7 +474,7 @@ fn builtin_flag_replaces_the_projects_catalogues() -> Outcome {
     let own = rules(&project, &[])?;
     assert_eq!(own.len(), 1);
     let given = eager(&project)?;
-    assert_eq!(given.len(), 108);
+    assert_eq!(given.len(), 109);
     assert!(given.iter().all(|rule| rule["id"] != "t.elif"));
     Ok(())
 }

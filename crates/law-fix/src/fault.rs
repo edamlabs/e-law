@@ -23,8 +23,14 @@ pub enum Fault {
         /// The bytes the edit replaces.
         bytes: Range<usize>,
     },
-    /// A fix that creates or moves a file, which this cut does not apply.
-    #[error("rule `{rule}`: a fix that creates or moves a file is not implemented")]
+    /// A move onto a path where a file already is; nothing of the fix is written.
+    #[error("{}: a move onto a file that exists", path.display())]
+    Occupied {
+        /// The path the move lands on.
+        path: PathBuf,
+    },
+    /// A fix that creates a file, which this cut does not apply.
+    #[error("rule `{rule}`: a fix that creates a file is not implemented")]
     Unsupported {
         /// The rule whose fix it is.
         rule: RuleId,
@@ -52,6 +58,9 @@ impl Rooted for Fault {
             Self::Range { path, bytes } => Self::Range {
                 path: path.rooted(root),
                 bytes,
+            },
+            Self::Occupied { path } => Self::Occupied {
+                path: path.rooted(root),
             },
             unsupported @ Self::Unsupported { .. } => unsupported,
         }

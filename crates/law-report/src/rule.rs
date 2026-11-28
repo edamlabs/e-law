@@ -11,6 +11,7 @@ use crate::format::Format;
 const NONE: &str = "none";
 const INDENT: &str = "    ";
 const DEEPER: &str = "      ";
+const DEEPEST: &str = "        ";
 const LIST: &str = ", ";
 const FILES: &str = "files";
 
@@ -60,7 +61,9 @@ impl Card {
                 let kinds: Vec<&str> = kinds.iter().map(Kind::as_str).collect();
                 format!("profile {} {aspect}", kinds.join(LIST))
             }
-            Check::Metric(MetricSpec { kinds, measure, over }) => {
+            Check::Metric(MetricSpec {
+                kinds, measure, over, ..
+            }) => {
                 let kinds: Vec<&str> = kinds.iter().map(Kind::as_str).collect();
                 format!("metric {} {measure} over {over}", kinds.join(LIST))
             }
@@ -176,14 +179,32 @@ impl Card {
             })
     }
 
+    fn snippet(label: &str, snippet: &Snippet, out: &mut dyn Write) -> io::Result<()> {
+        match snippet {
+            Snippet::Code(code) => {
+                writeln!(out, "{INDENT}{label}:")?;
+                Self::code(code, DEEPER, out)
+            }
+            Snippet::Files(files) => {
+                writeln!(out, "{INDENT}{label} of files:")?;
+                files.iter().try_for_each(|(path, code)| {
+                    writeln!(out, "{DEEPER}{}:", path.display())?;
+                    Self::code(code, DEEPEST, out)
+                })
+            }
+        }
+    }
+
     fn fixed(rule: &Rule, cases: &[FixedCase], out: &mut dyn Write) -> io::Result<()> {
         Self::head("fixed", cases.is_empty(), out)?;
         cases.iter().enumerate().try_for_each(|(index, case)| {
-            Self::entry(index, &Self::place(rule, case.path.as_ref()), out)?;
-            writeln!(out, "{INDENT}code:")?;
-            Self::code(&case.code, DEEPER, out)?;
-            writeln!(out, "{INDENT}expect:")?;
-            Self::code(&case.expect, DEEPER, out)
+            let place = match &case.snippet {
+                Snippet::Code(_) => Self::place(rule, case.path.as_ref()),
+                Snippet::Files(_) => PathBuf::from(FILES),
+            };
+            Self::entry(index, &place, out)?;
+            Self::snippet("code", &case.snippet, out)?;
+            Self::snippet("expect", &case.expect, out)
         })
     }
 

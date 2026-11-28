@@ -9,6 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::invalid::{Invalid, Refusal};
 
+const BAD_FIXED: &str = "a fixed case sets `code` and a text to `expect`, with an optional `path`, or a non-empty `files` and a table of files to `expect`, with no `path`";
 const BAD_CASE: &str = "a case sets `code`, with an optional `path`, or a non-empty `files`, with no `path`";
 
 /// What a case gives: one snippet, or a set of files, each by its path from the project root.
@@ -33,17 +34,18 @@ pub struct Case {
     pub snippet: Snippet,
 }
 
-/// A snippet a fix is proven against: after the fix, `code` becomes `expect` and the check is silent.
+/// What a fix is proven against: after the fix, the snippet becomes `expect`; or the files become the files of
+/// `expect`, by path, a moved one under its new path. A snippet is silent after the fix; files are only offered no
+/// further fix, for a move leaves the module where it was, in a package.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "FixedDocument", into = "FixedDocument")]
 pub struct FixedCase {
     /// The path the snippet pretends to sit at.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
-    /// The snippet before the fix.
-    pub code: String,
-    /// The snippet after the fix.
-    pub expect: String,
+    /// The snippet or the files before the fix.
+    pub snippet: Snippet,
+    /// The snippet or the files after the fix; of the same shape as the one before.
+    pub expect: Snippet,
 }
 
 /// The snippets a rule must pass, must catch, and must fix.
@@ -59,6 +61,66 @@ pub struct Cases {
     /// Snippets the rule's fix must resolve.
     #[serde(default)]
     pub fixed: Vec<FixedCase>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[schemars(extend("anyOf" = [
+    {"required": ["code"], "properties": {
+        "code": {"type": "string"},
+        "files": {"type": "null"},
+        "expect": {"type": "string"},
+    }},
+    {"required": ["files"], "properties": {
+        "files": {"type": "object", "minProperties": 1},
+        "code": {"type": "null"},
+        "path": {"type": "null"},
+        "expect": {"type": "object"},
+    }},
+]))]
+struct FixedDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    files: Option<BTreeMap<PathBuf, String>>,
+    expect: Expected,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(untagged)]
+enum Expected {
+    Code(String),
+    Files(BTreeMap<PathBuf, String>),
+}
+
+struct ExpectedVisitor;
+
+impl<'de> Visitor<'de> for ExpectedVisitor {
+    type Value = Expected;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("a snippet, or a table of files")
+    }
+
+    fn visit_str<E: de::Error>(self, code: &str) -> Result<Expected, E> {
+        Ok(Expected::Code(code.to_owned()))
+    }
+
+    fn visit_string<E: de::Error>(self, code: String) -> Result<Expected, E> {
+        Ok(Expected::Code(code))
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Expected, A::Error> {
+        BTreeMap::deserialize(MapAccessDeserializer::new(map)).map(Expected::Files)
+    }
+}
+
+impl<'de> Deserialize<'de> for Expected {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(ExpectedVisitor)
+    }
 }
 
 #[derive(JsonSchema)]
@@ -141,6 +203,54 @@ impl TryFrom<CaseDocument> for Case {
                 snippet: Snippet::Files(files),
             }),
             CaseDocument::Placed(_) => Err(Invalid::new(Refusal::BadCase, BAD_CASE)),
+        }
+    }
+}
+
+impl TryFrom<FixedDocument> for FixedCase {
+    type Error = Invalid;
+
+    fn try_from(document: FixedDocument) -> Result<Self, Self::Error> {
+        match document {
+            FixedDocument {
+                path,
+                code: Some(code),
+                files: None,
+                expect: Expected::Code(expect),
+            } => Ok(Self {
+                path,
+                snippet: Snippet::Code(code),
+                expect: Snippet::Code(expect),
+            }),
+            FixedDocument {
+                path: None,
+                code: None,
+                files: Some(files),
+                expect: Expected::Files(expect),
+            } if !files.is_empty() => Ok(Self {
+                path: None,
+                snippet: Snippet::Files(files),
+                expect: Snippet::Files(expect),
+            }),
+            _ => Err(Invalid::new(Refusal::BadCase, BAD_FIXED)),
+        }
+    }
+}
+
+impl From<FixedCase> for FixedDocument {
+    fn from(case: FixedCase) -> Self {
+        let (code, files) = match case.snippet {
+            Snippet::Code(code) => (Some(code), None),
+            Snippet::Files(files) => (None, Some(files)),
+        };
+        Self {
+            path: case.path,
+            code,
+            files,
+            expect: match case.expect {
+                Snippet::Code(code) => Expected::Code(code),
+                Snippet::Files(files) => Expected::Files(files),
+            },
         }
     }
 }

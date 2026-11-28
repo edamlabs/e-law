@@ -70,7 +70,8 @@ impl Node {
         Some((node, Arc::clone(outline)))
     }
 
-    fn within(&self) -> &str {
+    /// The package its relative imports resolve against: itself when a package's `__init__`, else its parent.
+    pub(crate) fn within(&self) -> &str {
         if self.package {
             &self.name
         } else {
@@ -198,6 +199,23 @@ impl Graph {
     /// Its edges.
     pub(crate) fn edges(&self) -> &[Edge] {
         &self.edges
+    }
+
+    /// The module at a path from the project root.
+    pub(crate) fn at(&self, path: &Path) -> Option<usize> {
+        self.nodes.binary_search_by(|node| node.path.as_path().cmp(path)).ok()
+    }
+
+    /// The modules, other than itself, an import statement of which names the module: each once, by path.
+    pub(crate) fn importers(&self, module: usize) -> Vec<usize> {
+        let mut found: Vec<usize> = self
+            .edges
+            .iter()
+            .filter(|edge| edge.to == module && edge.from != module)
+            .map(|edge| edge.from)
+            .collect();
+        found.dedup();
+        found
     }
 
     /// How big it is.
