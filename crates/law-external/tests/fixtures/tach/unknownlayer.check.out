@@ -1,0 +1,14 @@
+[
+  {
+    "Global": {
+      "severity": "Error",
+      "details": {
+        "Configuration": {
+          "UnknownLayer": {
+            "layer": "nope"
+          }
+        }
+      }
+    }
+  }
+]

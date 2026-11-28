@@ -1,0 +1,15 @@
+base check=0 external=0
+ok check=0 external=0
+undeclared check=1 external=0
+layer check=1 external=0
+forbidden check=1 external=0
+cycle check=1 external=1
+visibility check=1 external=1
+interfaces check=1 external=0
+ignores check=1 external=1
+nocfg check=1 external=1
+broken check=1 external=1
+unknownlayer check=1 external=0
+ext1 check=0 external=1
+unusedext check=0 external=0
+modext check=0 external=1

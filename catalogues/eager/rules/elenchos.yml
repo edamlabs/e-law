@@ -1,0 +1,102 @@
+- id: elenchos.no-swallow-raises
+  message: "a test proves the failure it names: `pytest.raises` with a `match`, or the precise exception"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: PT011}
+  fix: {safety: none, reason: "ruff offers no fix: the message the failure must carry is the author's"}
+  cases:
+    valid:
+      - "import pytest\n\n\ndef test_run() -> None:\n    with pytest.raises(ValueError, match='bad'):\n        run()\n"
+    invalid:
+      - "import pytest\n\n\ndef test_run() -> None:\n    with pytest.raises(ValueError):\n        run()\n"
+
+- id: elenchos.no-swallow-pass
+  message: "a failure is never swallowed: no `except` that only passes"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  severity: error
+  check: {engine: ruff, code: S110}
+  fix: {safety: none, reason: "ruff offers no fix: what the failure means here is the author's"}
+  cases:
+    valid:
+      - "try:\n    run()\nexcept ValueError as error:\n    raise KeyError('k') from error\n"
+    invalid:
+      - "try:\n    run()\nexcept Exception:\n    pass\n"
+
+- id: elenchos.no-cover-pragma
+  message: "a red is never hidden: no `# pragma: no cover`, the untested branch is tested or deleted"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  scope:
+    include: ["**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule: {kind: comment, regex: '#\s*(pragma|PRAGMA)[:\s]?\s*(no|NO)\s*(cover|COVER)'}
+  fix: {safety: none, reason: "the branch it hides is either dead and goes, or live and wants its test, and only the author knows which"}
+  cases:
+    valid:
+      - "x = 1  # noqa: E501"
+      - "def run() -> None:\n    raise NotImplementedError\n"
+      - "x = 1  # Pragma: no cover"
+    invalid:
+      - "def run() -> None:  # pragma: no cover\n    ...\n"
+      - "x = 1  # pragma: nocover"
+      - "x = 1  # pragma:   no   cover"
+      - "x = 1  # PRAGMA: NO COVER"
+      - "x = 1  #pragma no cover"
+      - "if TYPE_CHECKING:  # pragma:no cover\n    from a import b\n"
+
+- id: elenchos.no-ghost-skip
+  message: "a red is never hidden: no skip, xfail or importorskip; a test that cannot run errors"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  scope:
+    include: ["tests/**/*.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`(pytest\.(mark\.)?(skip|skipif|xfail|importorskip)|unittest\.skip)`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        pytest.mark.xfail: {msg: "a red is never hidden: fix the code or the expectation"}
+        pytest.xfail: {msg: "a red is never hidden: fix the code or the expectation"}
+        pytest.mark.skip: {msg: "a red is never hidden: a tier that cannot run errors"}
+        pytest.mark.skipif: {msg: "a red is never hidden: a tier that cannot run errors"}
+        pytest.skip: {msg: "a red is never hidden: a tier that cannot run errors"}
+        pytest.importorskip: {msg: "a red is never hidden: a missing dependency is an error"}
+        unittest.skip: {msg: "a red is never hidden: a tier that cannot run errors"}
+  fix: {safety: none, reason: "whether the test is fixed, rewritten or deleted is the author's"}
+  cases:
+    valid:
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\n\n@pytest.mark.parametrize('n', [1, 2])\ndef test_run(n: int) -> None:\n    assert n\n"
+    invalid:
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\n\ndef test_run() -> None:\n    pytest.skip('later')\n"
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\n\n@pytest.mark.xfail\ndef test_run() -> None: ...\n"
+      - path: tests/unit/test_run.py
+        code: "import pytest\n\nlib = pytest.importorskip('lib')\n"
+
+- id: elenchos.mocker-only
+  message: "mock through the `mocker` fixture of pytest-mock, never `unittest.mock`"
+  tags: {law: "11", set: ELENCHOS, principle: Grounded}
+  scope:
+    include: ["tests/**/*.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`unittest\.mock`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        unittest.mock: {msg: "use the `mocker` fixture of pytest-mock"}
+  fix: {safety: none, reason: "the fixture that carries the patch, and what it patches, is the author's"}
+  cases:
+    valid:
+      - path: tests/unit/test_run.py
+        code: "def test_run(mocker) -> None:\n    mocker.patch('pkg.run')\n"
+    invalid:
+      - path: tests/unit/test_run.py
+        code: "from unittest.mock import patch\n"
+      - path: tests/unit/test_run.py
+        code: "from unittest import mock\n"

@@ -1,0 +1,11 @@
+- kind: models
+  home: ["src/**/models.py"]
+  thresholds: {units: 16, lines: 500}
+
+- kind: nodes
+  home: ["src/**/nodes.py"]
+  thresholds: {units: 16, lines: 500}
+
+- kind: unit
+  home: ["src/**/models/*.py", "src/**/nodes/*.py"]
+  thresholds: {units: 1}

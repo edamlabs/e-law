@@ -1,0 +1,280 @@
+- id: lexis.no-elif
+  formerly: [elif]
+  message: "if/elif is a decision table nobody wrote down: typed dispatch, a frozen mapping or match-case"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule: {kind: elif_clause}
+  fix: {safety: none, reason: "the table's keys, typed dispatch or match-case has to be chosen, not derived from the branches"}
+  cases:
+    valid:
+      - "x = a if b else c"
+    invalid:
+      - "if a:\n    x = 1\nelif b:\n    x = 2\n"
+
+- id: lexis.no-if-else
+  formerly: [if-else]
+  message: "if/else is never a statement: a ternary, match-case or dispatch"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: if_statement
+      has: {field: alternative, kind: else_clause}
+  fix: {safety: none, reason: "a ternary only fits two single assignments to one name; any other body needs a mechanism chosen by hand"}
+  cases:
+    valid:
+      - "x = a if b else c"
+      - "if not ok:\n    raise Error\n"
+    invalid:
+      - "if a:\n    x = 1\nelse:\n    x = 2\n"
+      - "if a:\n    x = 1\nelse:\n    if b:\n        x = 2\n"
+
+- id: lexis.no-nested-if
+  formerly: [if-nested]
+  message: "never an if inside an if: the cascade is a table — dispatch or match-case"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: if_statement
+      inside: {kind: if_statement, stopBy: end}
+  fix: {safety: none, reason: "merging conditions with `and` changes what the outer branch does when the inner one fails"}
+  cases:
+    valid:
+      - "if a:\n    raise Error\n"
+    invalid:
+      - "if a:\n    if b:\n        raise Error\n"
+
+- id: lexis.no-if-twice
+  formerly: [if-twice]
+  message: "two ifs in a row mean the mechanism is wrong: dispatch or match-case"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: if_statement
+      follows: {kind: if_statement}
+  fix: {safety: none, reason: "two guards may be independent or one table, and the code alone does not say which"}
+  cases:
+    valid:
+      - "if a:\n    raise Error\nx = 1\n"
+    invalid:
+      - "if a:\n    raise A\nif b:\n    raise B\n"
+
+- id: lexis.guard-only
+  formerly: [if-block]
+  message: "an if holds one statement (a guard); more is a branch — dispatch or match-case"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: if_statement
+      has:
+        field: consequence
+        has: {nthChild: {position: 2, ofRule: {not: {kind: comment}}}}
+      not:
+        has: {field: condition, regex: '^(TYPE_CHECKING|__name__ == "__main__")$'}
+  fix: {safety: none, reason: "the block becomes a method or a handler whose name and home the author has to give"}
+  cases:
+    valid:
+      - "if not ok:\n    # why\n    raise Error\n"
+      - "if TYPE_CHECKING:\n    from a import b\n    from c import d\n"
+    invalid:
+      - "if ok:\n    a = 1\n    b = 2\n"
+
+- id: lexis.no-nested-ternary
+  formerly: [ternary-nested]
+  message: "a ternary never nests: a cascade of them is a table — dispatch or match-case"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: conditional_expression
+      inside: {kind: conditional_expression, stopBy: end}
+  fix: {safety: none, reason: "the cascade's keys and its table's home are a design, not a rewrite"}
+  cases:
+    valid:
+      - "x = a if b else c"
+    invalid:
+      - "x = a if b else c if d else e"
+      - "x = (a if b else c) if d else e"
+
+- id: lexis.no-isinstance-chain
+  formerly: [isinstance-chain]
+  message: "an isinstance chain is hand-written multiple dispatch: ovld, or class patterns in match-case"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      pattern: isinstance($X, $A) or isinstance($X, $B)
+  fix: {safety: none, reason: "folding into a tuple keeps the chain; the dispatch that replaces it splits the code that follows"}
+  cases:
+    valid:
+      - "ok = isinstance(x, (A, B))"
+      - "ok = isinstance(node, Constant) and isinstance(node.value, str)"
+    invalid:
+      - "ok = isinstance(x, A) or isinstance(x, B)"
+
+- id: lexis.no-loop
+  formerly: [loop]
+  message: "no for, no while: comprehensions and functional operators (inside an async def only a loop that must suspend: a while that awaits, a for that yields — an async generator has no yield from — or an async for that awaits)"
+  tags: {law: "3", set: LEXIS, principle: Economical}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any: [{kind: for_statement}, {kind: while_statement}]
+      not:
+        inside: {kind: function_definition, regex: '^async\b', stopBy: end}
+        any:
+          - all: [{kind: while_statement}, {has: {any: [{kind: await}, {kind: yield}], stopBy: end}}]
+          - all: [{kind: for_statement}, {has: {kind: yield, stopBy: end}}]
+          - all: [{kind: for_statement}, {regex: '^async\b'}, {has: {kind: await, stopBy: end}}]
+  fix: {safety: none, reason: "a loop body mixes traversal, selection and effects that only a person can split into a pipeline"}
+  cases:
+    valid:
+      - "y = [v for v in xs]"
+      - "async def a():\n    while True:\n        await tick()\n"
+      - "async def a():\n    while more:\n        page = await get()\n        for i in page:\n            yield i\n"
+      - "async def a():\n    async for x in xs:\n        yield x\n"
+      - "async def a():\n    async for x in xs:\n        await f(x)\n"
+    invalid:
+      - "for x in xs:\n    f(x)\n"
+      - "while running:\n    step()\n"
+      - "async def a():\n    async for x in xs:\n        f(x)\n"
+      - "async def a():\n    for x in xs:\n        await f(x)\n"
+      - "async def a():\n    while running:\n        step()\n"
+      - "def a():\n    for x in xs:\n        yield x\n"
+      - "def a():\n    while True:\n        yield next(it)\n"
+
+- id: lexis.opened-descriptor
+  formerly: [not-open]
+  message: "a provider's resource read before open is an `Opened[T]` descriptor (ports/provider), never a hand-written `case None: raise`"
+  tags: {law: "8", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/*/providers/**/*.py", "src/*/engines/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      all:
+        - kind: string
+        - regex: 'is not open'
+  fix: {safety: none, reason: "the string only marks a guard; the attribute it protects has to be found and retyped as the descriptor"}
+  cases:
+    valid:
+      - 'msg = f"cannot open {name}: {failure}"'
+    invalid:
+      - 'msg = "CacheDriver is not open: the lifespan opens it"'
+
+- id: lexis.if-else-ternary
+  message: "a binary assignment is a ternary, never an if/else block"
+  tags: {law: "5", set: LEXIS, principle: Expressive}
+  severity: error
+  check: {engine: ruff, code: SIM108}
+  fix: {safety: unsafe}
+  cases:
+    valid:
+      - "def pick(flag: bool) -> int:\n    value = 1 if flag else 2\n    return value\n"
+    invalid:
+      - "def pick(flag: bool) -> int:\n    if flag:\n        value = 1\n    else:\n        value = 2\n    return value\n"
+    fixed:
+      - code: "def pick(flag: bool) -> int:\n    if flag:\n        value = 1\n    else:\n        value = 2\n    return value\n"
+        expect: "def pick(flag: bool) -> int:\n    value = 1 if flag else 2\n    return value\n"
+
+- id: lexis.comprehension
+  message: "expressions over statements: a list built in a loop is a comprehension"
+  tags: {law: "7", set: LEXIS, principle: Expressive}
+  severity: error
+  check: {engine: ruff, code: PERF401}
+  fix: {safety: none, reason: "ruff fixes it only in preview"}
+  cases:
+    valid:
+      - "def double(items: list[int]) -> list[int]:\n    return [item * 2 for item in items]\n"
+    invalid:
+      - "def double(items: list[int]) -> list[int]:\n    out = []\n    for item in items:\n        out.append(item * 2)\n    return out\n"
+
+- id: lexis.no-abc-port
+  message: "a port is a Protocol, never an ABC: structure meets it, no implementer inherits a base to be one"
+  tags: {law: "18", set: LEXIS, principle: Expressive}
+  scope:
+    exclude: ["**/__init__.py", "**/models.py", "**/enums.py", "**/state.py", "**/nodes/**"]
+  severity: error
+  check: {engine: profile, kinds: [port], aspect: never}
+  fix: {safety: none, reason: "dropping the ABC turns nominal implementers structural, which each of them must be checked against"}
+  cases:
+    valid:
+      - path: src/pkg/ports/database.py
+        code: "from typing import Protocol\n\n\nclass DatabasePort(Protocol): ...\n"
+      - path: src/pkg/ports/database.py
+        code: "from abc import ABC\n\n\nclass Row(ABC): ...\n"
+    invalid:
+      - path: src/pkg/ports/database.py
+        code: "from abc import ABC\n\n\nclass DatabasePort(ABC): ...\n"
+      - path: src/pkg/ports/database.py
+        code: "import abc\n\n\nclass DatabasePort(abc.ABC): ...\n"
+      - path: src/pkg/ports/database.py
+        code: "from abc import ABC\n\n\nclass Base(ABC): ...\n\n\nclass DatabasePort(Base): ...\n"
+      - path: src/pkg/ports/database.py
+        code: "from abc import ABC\n\nfrom pkg.missing import Base\n\n\nclass DatabasePort(Base, ABC):\n    spec: ClassVar[ProviderSpec]\n"
+      - path: src/pkg/ports/database.py
+        code: "from contextlib import AbstractContextManager\n\n\nclass DatabasePort(AbstractContextManager): ...\n"
+
+- id: lexis.slots-dataclass
+  message: "a dataclass declares its slots: `@dataclass(slots=True)`, frozen too unless the object must change"
+  tags: {law: "8", set: LEXIS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: decorator
+      inside: {kind: decorated_definition, has: {kind: class_definition}}
+      any:
+        - has: {any: [{kind: identifier, regex: '^dataclass$'}, {kind: attribute, regex: '^dataclasses\.dataclass$'}]}
+        - has:
+            kind: call
+            has: {field: function, regex: '^(dataclasses\.)?dataclass$'}
+            not:
+              has:
+                field: arguments
+                has: {kind: keyword_argument, all: [{has: {field: name, regex: '^slots$'}}, {has: {field: value, kind: 'true'}}]}
+  fix: {safety: none, reason: "slots forbid a per-instance __dict__, and a class that assigns an attribute outside its fields breaks only once it runs"}
+  cases:
+    valid:
+      - "@dataclass(slots=True, frozen=True)\nclass Row:\n    id: int\n"
+      - "@dataclasses.dataclass(slots=True)\nclass Row:\n    id: int\n"
+      - "@frozen\nclass Row:\n    id: int\n"
+      - "@dataclass\ndef run() -> None: ...\n"
+    invalid:
+      - "@dataclass\nclass Row:\n    id: int\n"
+      - "@dataclass()\nclass Row:\n    id: int\n"
+      - "@dataclass(frozen=True)\nclass Row:\n    id: int\n"
+      - "@dataclasses.dataclass(kw_only=True)\nclass Row:\n    id: int\n"
+      - "@dataclass(frozen=True)  # slots=True\nclass Row:\n    id: int\n"
+      - "@dataclass  # slots=True\nclass Row:\n    id: int\n"

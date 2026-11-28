@@ -1,0 +1,396 @@
+- id: banks.settings-case
+  formerly: [settings-case]
+  message: "a setting is named as its environment variable: in CAPITALS"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/*/infra/config/**/*.py", "src/*/infra/settings.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: assignment
+      inside:
+        kind: expression_statement
+        inside:
+          kind: block
+          inside: {kind: class_definition, has: {field: superclasses, regex: 'Settings'}}
+      all:
+        - has: {field: type, kind: type}
+        - has:
+            field: left
+            kind: identifier
+            not: {regex: '^(model_config|[A-Z][A-Z0-9_]*)$'}
+  fix: {safety: none, reason: "renaming a setting renames its environment variable, and every deployment that sets it"}
+  cases:
+    valid:
+      - "class S(BaseSettings):\n    APP_ENV: str = 'dev'\n    model_config = SettingsConfigDict()\n"
+      - "class AgentTier(BaseModel):\n    api_base: str | None = None\n"
+    invalid:
+      - "class S(BaseSettings):\n    app_env: str = 'dev'\n"
+      - "class SecretsEnv(SettingsBase):\n    app_env: str = 'dev'\n"
+
+- id: banks.logger-singleton
+  formerly: [logger-singleton]
+  message: "one logger: import `logger` from infra/logger; a structlog logger built at a call site escapes the singleton (its setup, its redact stage, its tracer hook)"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py"]
+    exclude: ["src/*/infra/logger.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: call
+      has: {field: function, regex: '^(structlog\.)?get_logger$'}
+  fix: {safety: none, reason: "a named logger may carry bound context, and the singleton's import path is the project's own"}
+  cases:
+    valid:
+      - 'logger.info("graph.built")'
+    invalid:
+      - 'structlog.get_logger("app").info("graph.built")'
+      - "get_logger().warning('x')"
+
+- id: banks.settings-root-only
+  formerly: [settings-root-only]
+  message: "settings are read by the doors and the composition root alone (api/, cli/, main); below them a value is handed down, typed"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py"]
+    exclude: ["src/*/api/**", "src/*/cli/**", "src/*/main.py", "src/*/infra/settings.py", "src/*/infra/config/**"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - kind: import_from_statement
+          has: {field: module_name, regex: '^\w+\.infra\.settings$'}
+        - kind: import_from_statement
+          regex: '^from \w+\.infra import .*\bsettings\b'
+        - kind: import_statement
+          regex: '^import \w+\.infra\.settings\b'
+  fix: {safety: none, reason: "the value has to be threaded from the root through every constructor down to the reader"}
+  cases:
+    valid:
+      - "from pkg.infra.config.base import Env"
+      - "from pkg.infra.state import InfraState"
+    invalid:
+      - "from pkg.infra.settings import settings as st"
+      - "from pkg.infra import settings"
+      - "import pkg.infra.settings"
+
+- id: banks.file-parents
+  formerly: [file-parents]
+  message: "never a path read from below: a location is absolute and given (the environment, a setting, the event) or anchored once at the root (`Path(sys.prefix).parent`), never derived from the module's own file"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py", "scripts/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - pattern: Path(__file__).parent
+        - pattern: Path(__file__).parents
+        - pattern: Path(__file__).resolve().parent
+        - pattern: Path(__file__).resolve().parents
+        - pattern: pathlib.Path(__file__).parent
+        - pattern: pathlib.Path(__file__).parents
+  fix: {safety: none, reason: "where the location comes from — a setting, the environment, the root anchor — is the author's to give"}
+  cases:
+    valid:
+      - "ROOT: Final = Path(sys.prefix).parent"
+      - "here = Path(os.environ['CLAUDE_PROJECT_DIR'])"
+    invalid:
+      - "ROOT = Path(__file__).resolve().parents[2]"
+      - "HERE = Path(__file__).parent / 'data'"
+      - "x = pathlib.Path(__file__).parents[1]"
+
+- id: banks.no-inline-sql
+  formerly: [bank-sql-inline]
+  message: "SQL outside its bank: a statement is a member of the consumer's statement enum (query.py), with its description and parameter types"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["**/*.py"]
+    exclude: ["tests/**", "**/tests/**", "**/query.py", "**/queries.py", "**/migrations/**"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - kind: concatenated_string
+        - kind: string
+          not: {inside: {kind: concatenated_string}}
+      regex: '(?s)^[rbuRBUfF]*["'']+\s*(SELECT\s+(\d|.+[\s"'']FROM\s)|INSERT\s+INTO\s|UPDATE\s+\S+\s+SET\s|DELETE\s+FROM\s|CREATE\s+(TABLE|INDEX|SCHEMA|EXTENSION)\b|ALTER\s+TABLE\s|DROP\s+(TABLE|SCHEMA|INDEX)\b|TRUNCATE\s|WITH\s+\w+\s+AS\s*\()'
+  fix: {safety: none, reason: "the member's name, description and parameter types are written by hand, and an f-string has to become parameters"}
+  cases:
+    valid:
+      - "label = 'select a plan'"
+      - "x = 'SELECT is a keyword'"
+    invalid:
+      - "q = 'SELECT 1'"
+      - "q = f'DELETE FROM t WHERE id = {i}'"
+      - "q = (\n    'SELECT a '\n    'FROM t'\n)\n"
+
+- id: banks.no-prose-pattern
+  formerly: [bank-prose-pattern]
+  message: "a pattern over human language inline: it is a member of a rule bank keyed by (label, language), with its description, hits and misses"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["**/*.py"]
+    exclude: ["tests/**", "**/tests/**"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - pattern: re.$F($PAT)
+        - pattern: re.$F($PAT, $$$)
+    constraints:
+      F: {regex: '^(compile|search|match|fullmatch|findall|finditer|sub|split)$'}
+      PAT: {regex: '(?is).*?([^\W\d_]{4,}[^|]*\|){2,}'}
+  fix: {safety: none, reason: "the bank member needs its label, language, hits and misses, which the pattern does not carry"}
+  cases:
+    valid:
+      - "SLOT = re.compile(r'\\{(\\w+)\\}')"
+    invalid:
+      - "HELLO = re.compile(r'hola|buenas|saludos', re.I)"
+      - "found = re.search(r'\\bseguro\\s+de\\s+vida|salud|decesos', text)"
+      - "ABSOLUTE = re.compile(r'\\b(MUST|NEVER|ALWAYS|FORBIDDEN)\\b')"
+      - "SKIP = re.compile(\n    r'(?:^|/)(?:tests?/resources|fixtures?|vendor)'\n    r'|\\.?venv|\\.tox|site-packages'\n)\n"
+
+- id: banks.no-prose-literal
+  formerly: [bank-prose-literal]
+  message: "a prompt or prose written in code: it lives in a versioned bank (an agent file, a text table per language)"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["**/*.py"]
+    exclude: ["tests/**", "**/tests/**"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: assignment
+      has:
+        field: right
+        regex: '^\(?\s*[rbu]*["''](?:[^\s"'']+[\s"'']+){40,}'
+      not:
+        inside: {kind: class_definition, has: {field: superclasses, regex: 'Enum'}, stopBy: end}
+  fix: {safety: none, reason: "the bank, its language key and its version are the project's to choose"}
+  cases:
+    valid:
+      - "LABEL = 'a short line'"
+      - "class Query(Base, Enum):\n    PROMPT = 'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word'\n"
+    invalid:
+      - "PROMPT = 'word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word'"
+
+- id: banks.port-takes-bank-type
+  formerly: [bank-port-takes-text]
+  message: "a port that admits a raw string for a statement or a command: it takes the bank's member type"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["**/*.py"]
+    exclude: ["tests/**", "**/tests/**"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      kind: function_definition
+      inside:
+        kind: class_definition
+        stopBy: end
+        has: {field: superclasses, regex: '\bProtocol\b'}
+      has:
+        field: parameters
+        has:
+          any: [{kind: typed_parameter}, {kind: typed_default_parameter}]
+          all:
+            - has: {kind: identifier, regex: '^(sql|statement|query|cmd|command)$'}
+            - has: {field: type, regex: '^str$'}
+  fix: {safety: none, reason: "the bank type may not exist yet, and every provider and caller of the port changes with the signature"}
+  cases:
+    valid:
+      - "class DatabasePort(Protocol):\n    async def fetch(self, query: Query) -> list[Row]: ...\n"
+      - "class Client:\n    def run(self, sql: str) -> None: ...\n"
+    invalid:
+      - "class DatabasePort(Protocol):\n    async def fetch(self, sql: str) -> list[Row]: ...\n"
+
+- id: banks.literalstring-cast
+  formerly: [bank-literalstring-cast]
+  message: "a cast to LiteralString defeats the statement bank: allowed once, where a statement arrives as data: register an exception"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["**/*.py"]
+    exclude: ["tests/**", "**/tests/**"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - pattern: cast("LiteralString", $$$)
+        - pattern: cast(LiteralString, $$$)
+        - pattern: typing.cast(LiteralString, $$$)
+  fix: {safety: none, reason: "the text being cast is data, and only a bank member or a marked exception can stand in for it"}
+  cases:
+    valid:
+      - "sql = Query(text, 'migration')"
+    invalid:
+      - "sql = cast(LiteralString, text)"
+      - "sql = typing.cast(LiteralString, text)"
+
+- id: banks.no-text-in-code
+  formerly: [text-in-code]
+  message: "no text a model reads or a person hears lives in Python: it is a member of a semantic bank, keyed by language and versioned"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/*/logic/**/*.py", "src/*/models/**/*.py"]
+    exclude: ["**/query.py", "**/queries.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - kind: concatenated_string
+        - kind: string
+          not: {inside: {kind: concatenated_string}}
+      not: {inside: {kind: expression_statement}}
+      regex: '(?s)^.{122,}$|[.!?]\s+[A-Z¿¡]'
+  fix: {safety: none, reason: "the harness file, its key and its loader are the author's to name"}
+  cases:
+    valid:
+      - "def f():\n    \"\"\"A docstring may say as much as it needs. It is documentation.\"\"\"\n"
+      - "label = 'on_topic'"
+      - path: src/pkg/models/bank/query.py
+        code: "SELECT_ALL = 'SELECT id, name, email, created_at FROM users WHERE active = true AND deleted_at IS NULL ORDER BY name ASC LIMIT 100 OFFSET 0'"
+    invalid:
+      - "INSTRUCTION = 'Classify the message. Answer with the label only.'"
+      - "msg = f'`{tool}` is not available now: {why}. Do not call it again in this turn.'"
+
+- id: banks.no-regex-in-logic
+  formerly: [regex-in-logic]
+  message: "no regular expressions in the logic: a format's live in ops/, an intent's live nowhere — a model reads intent"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/*/logic/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - kind: import_statement
+          regex: '^import re\b'
+        - kind: import_from_statement
+          has: {field: module_name, regex: '^re$'}
+  fix: {safety: none, reason: "whether the expression reads a format or an intent decides if it moves to ops/ or is replaced by a model"}
+  cases:
+    valid:
+      - "import msgspec"
+    invalid:
+      - "import re"
+      - "from re import compile"
+
+- id: banks.no-hand-prompt
+  formerly: [prompt-by-hand]
+  message: "a model is never called with a hand-written prompt: it comes from the harness, through a PromptSpec"
+  tags: {law: "26", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/*/logic/**/*.py"]
+  severity: error
+  check:
+    engine: pattern
+    rule:
+      any:
+        - pattern: $O.classify($P, $$$)
+        - pattern: $O.invoke($P, $$$)
+        - pattern: $O.ainvoke($P, $$$)
+    constraints:
+      P:
+        any:
+          - regex: '^[A-Z][A-Z0-9_]*$'
+          - kind: string
+          - kind: concatenated_string
+  fix: {safety: none, reason: "the prompt moves to a harness file and a PromptSpec the author writes"}
+  cases:
+    valid:
+      - "state = await graph.ainvoke({'messages': messages}, config)"
+    invalid:
+      - "label = await self._classifier.classify(INSTRUCTION, text, labels, config)"
+      - "reply = await model.ainvoke('Say hello to the customer', config)"
+
+- id: banks.no-print
+  message: "never `print`: a structured log event"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  severity: error
+  check: {engine: ruff, code: T201}
+  fix: {safety: unsafe}
+  cases:
+    valid:
+      - "logger.info('ready')\n"
+    invalid:
+      - "print('ready')\n"
+    fixed:
+      - code: "print('ready')\nsize = 1\n"
+        expect: "size = 1\n"
+
+- id: banks.event-not-fstring
+  message: "a log event is a name and its fields, never an f-string"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  severity: error
+  check: {engine: ruff, code: G004}
+  fix: {safety: none, reason: "ruff fixes it only in preview, and into %-arguments, never an event's fields"}
+  cases:
+    valid:
+      - "import logging\n\nlogger = logging.getLogger(__name__)\n\n\ndef run(name: str) -> None:\n    logger.info('hello', extra={'name': name})\n"
+    invalid:
+      - "import logging\n\nlogger = logging.getLogger(__name__)\n\n\ndef run(name: str) -> None:\n    logger.info(f'hello {name}')\n"
+
+- id: banks.no-os-environ
+  message: "config is read once, at the composition root, through pydantic-settings: never `os.environ` or `os.getenv`"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`os\.(environ|getenv)`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        os.environ: {msg: "read config through pydantic-settings, at the composition root only"}
+        os.getenv: {msg: "read config through pydantic-settings, at the composition root only"}
+  fix: {safety: none, reason: "the setting that replaces the environment read, and where it is declared, is the author's"}
+  cases:
+    valid:
+      - path: src/pkg/infra/config.py
+        code: "import os\n\nhome = os.path.expanduser('~')\n"
+    invalid:
+      - path: src/pkg/api/routes.py
+        code: "import os\n\nhome = os.environ['HOME']\n"
+      - path: src/pkg/api/routes.py
+        code: "import os\n\nhome = os.getenv('HOME')\n"
+
+- id: banks.no-stdlib-logging
+  message: "one logger: `logger` of infra/logger, structlog's; never the standard library's `logging`"
+  tags: {law: "16", set: BANKS, principle: Expressive}
+  scope:
+    include: ["src/**/*.py"]
+    exclude: ["src/*/infra/logger.py"]
+  severity: error
+  check:
+    engine: ruff
+    code: TID251
+    message: '^`logging`'
+    settings:
+      lint.flake8-tidy-imports.banned-api:
+        logging: {msg: "log through `logger` of infra/logger"}
+  fix: {safety: none, reason: "the event name and its fields replace the message string, and only the author knows them"}
+  cases:
+    valid:
+      - path: src/pkg/api/routes.py
+        code: "from pkg.infra.logger import logger\n\nlogger.info('route.served')\n"
+      - path: src/pkg/infra/logger.py
+        code: "import logging\n\nroot = logging.getLogger()\n"
+    invalid:
+      - path: src/pkg/api/routes.py
+        code: "import logging\n\nlog = logging.getLogger(__name__)\n"
+      - path: src/pkg/api/routes.py
+        code: "from logging import getLogger\n"

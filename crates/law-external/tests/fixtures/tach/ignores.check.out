@@ -1,0 +1,28 @@
+[
+  {
+    "Located": {
+      "file_path": "src/pkg/ui/view.py",
+      "line_number": 1,
+      "original_line_number": null,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "MissingIgnoreDirectiveReason": []
+        }
+      }
+    }
+  },
+  {
+    "Located": {
+      "file_path": "src/pkg/ui/view.py",
+      "line_number": 1,
+      "original_line_number": null,
+      "severity": "Error",
+      "details": {
+        "Code": {
+          "UnusedIgnoreDirective": []
+        }
+      }
+    }
+  }
+]

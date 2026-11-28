@@ -1,0 +1,37 @@
+- id: fx.alpha
+  message: alpha
+  tags: {law: "2", set: [A], tier: "2"}
+  check:
+    engine: pattern
+    rule: {pattern: "old($A)"}
+    fix: "new($A)"
+  fix: {safety: safe}
+- id: fx.beta
+  message: beta
+  tags: {law: "10", set: [A, B], tier: "10"}
+  check: {engine: ruff, code: F401}
+  fix: {safety: unsafe}
+- id: fx.gamma
+  message: gamma
+  tags: {law: "10", set: B, tier: x}
+  check: {engine: tree, dirs: ["pk/*"], allow: ["*/"]}
+  fix: {safety: none, reason: x}
+- id: fx.delta
+  message: delta
+  tags: {law: "3", set: B}
+  check: {engine: pattern, rule: {kind: lambda}}
+  fix: {safety: none, reason: x}
+- id: fx.epsilon
+  message: epsilon
+  tags: {set: B}
+  check: {engine: ty}
+  fix: {safety: none, reason: x}
+- id: fx.zeta
+  message: zeta
+  check: {engine: pattern, rule: {kind: elif_clause}}
+  fix: {safety: none, reason: x}
+- id: fx.eta
+  message: eta
+  tags: {law: "2"}
+  check: {engine: pattern, rule: {kind: lambda}}
+  fix: {safety: none, reason: x}

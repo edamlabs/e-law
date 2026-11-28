@@ -1,0 +1,9 @@
+# law.toml — or the same keys under [tool.law] in pyproject.toml; law.toml wins if both exist (a finding: two configs)
+roots = ["src", "tests"]
+catalogues = ["eager", "law/"]          # a built-in name, or a directory; the project's own layer is just the last one
+select = ["ALL"]                         # default ALL
+ignore = ["law=prompts", "lexis.loop"]
+exceptions = "law.exceptions.toml"       # [[exception]] tables
+
+[profiles.engine.thresholds]             # the only thing a project overrides in place: a declared number
+lines = 400

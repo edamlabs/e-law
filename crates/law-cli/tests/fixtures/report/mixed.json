@@ -1,0 +1,718 @@
+{
+  "run": {
+    "tool": "0.1.0",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "date": "2026-01-02T03:04:05Z",
+    "catalogues": [
+      {
+        "name": "t",
+        "version": "1",
+        "digest": "sha256:cc545f3eb5d541e28d9262465698fe799e2fc33c88ac6472305b53092e6d2c8b"
+      }
+    ],
+    "select": [
+      "ALL"
+    ],
+    "ignore": [],
+    "paths": [
+      "pk"
+    ]
+  },
+  "findings": [
+    {
+      "rule": "t.swap",
+      "path": "pk/dir ñ/ñandú.py",
+      "span": {
+        "start": {
+          "line": 3,
+          "column": 5
+        },
+        "end": {
+          "line": 3,
+          "column": 13
+        },
+        "bytes": {
+          "start": 19,
+          "end": 28
+        }
+      },
+      "message": "use new",
+      "severity": "error",
+      "tags": {
+        "kit": "py",
+        "law": "5",
+        "set": "LEXIS"
+      },
+      "fix": {
+        "safety": "safe",
+        "edits": [
+          {
+            "edit": "replace",
+            "path": "pk/dir ñ/ñandú.py",
+            "bytes": {
+              "start": 19,
+              "end": 28
+            },
+            "text": "new(á.b)"
+          }
+        ]
+      }
+    },
+    {
+      "rule": "t.elif",
+      "path": "pk/dir ñ/ñandú.py",
+      "span": {
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 7,
+          "column": 9
+        },
+        "bytes": {
+          "start": 44,
+          "end": 60
+        }
+      },
+      "message": "no elif",
+      "severity": "error",
+      "tags": {
+        "law": "10",
+        "set": [
+          "LEXIS",
+          "OST"
+        ]
+      }
+    },
+    {
+      "rule": "t.untagged",
+      "path": "pk/dir ñ/ñandú.py",
+      "span": {
+        "start": {
+          "line": 8,
+          "column": 1
+        },
+        "end": {
+          "line": 8,
+          "column": 9
+        },
+        "bytes": {
+          "start": 61,
+          "end": 69
+        }
+      },
+      "message": "untagged rule",
+      "severity": "error",
+      "tags": {}
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 1,
+          "column": 6
+        },
+        "end": {
+          "line": 1,
+          "column": 15
+        },
+        "bytes": {
+          "start": 5,
+          "end": 14
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 2,
+          "column": 6
+        },
+        "end": {
+          "line": 2,
+          "column": 15
+        },
+        "bytes": {
+          "start": 20,
+          "end": 29
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 3,
+          "column": 6
+        },
+        "end": {
+          "line": 3,
+          "column": 15
+        },
+        "bytes": {
+          "start": 35,
+          "end": 44
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 4,
+          "column": 6
+        },
+        "end": {
+          "line": 4,
+          "column": 15
+        },
+        "bytes": {
+          "start": 50,
+          "end": 59
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 5,
+          "column": 6
+        },
+        "end": {
+          "line": 5,
+          "column": 15
+        },
+        "bytes": {
+          "start": 65,
+          "end": 74
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 6,
+          "column": 6
+        },
+        "end": {
+          "line": 6,
+          "column": 15
+        },
+        "bytes": {
+          "start": 80,
+          "end": 89
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 7,
+          "column": 6
+        },
+        "end": {
+          "line": 7,
+          "column": 15
+        },
+        "bytes": {
+          "start": 95,
+          "end": 104
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 8,
+          "column": 6
+        },
+        "end": {
+          "line": 8,
+          "column": 15
+        },
+        "bytes": {
+          "start": 110,
+          "end": 119
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 9,
+          "column": 6
+        },
+        "end": {
+          "line": 9,
+          "column": 15
+        },
+        "bytes": {
+          "start": 125,
+          "end": 134
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 10,
+          "column": 6
+        },
+        "end": {
+          "line": 10,
+          "column": 15
+        },
+        "bytes": {
+          "start": 140,
+          "end": 149
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 11,
+          "column": 7
+        },
+        "end": {
+          "line": 11,
+          "column": 17
+        },
+        "bytes": {
+          "start": 156,
+          "end": 166
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 12,
+          "column": 7
+        },
+        "end": {
+          "line": 12,
+          "column": 17
+        },
+        "bytes": {
+          "start": 173,
+          "end": 183
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 13,
+          "column": 7
+        },
+        "end": {
+          "line": 13,
+          "column": 17
+        },
+        "bytes": {
+          "start": 190,
+          "end": 200
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 14,
+          "column": 7
+        },
+        "end": {
+          "line": 14,
+          "column": 17
+        },
+        "bytes": {
+          "start": 207,
+          "end": 217
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 15,
+          "column": 7
+        },
+        "end": {
+          "line": 15,
+          "column": 17
+        },
+        "bytes": {
+          "start": 224,
+          "end": 234
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 16,
+          "column": 7
+        },
+        "end": {
+          "line": 16,
+          "column": 17
+        },
+        "bytes": {
+          "start": 241,
+          "end": 251
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 17,
+          "column": 7
+        },
+        "end": {
+          "line": 17,
+          "column": 17
+        },
+        "bytes": {
+          "start": 258,
+          "end": 268
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 18,
+          "column": 7
+        },
+        "end": {
+          "line": 18,
+          "column": 17
+        },
+        "bytes": {
+          "start": 275,
+          "end": 285
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 19,
+          "column": 7
+        },
+        "end": {
+          "line": 19,
+          "column": 17
+        },
+        "bytes": {
+          "start": 292,
+          "end": 302
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 20,
+          "column": 7
+        },
+        "end": {
+          "line": 20,
+          "column": 17
+        },
+        "bytes": {
+          "start": 309,
+          "end": 319
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 21,
+          "column": 7
+        },
+        "end": {
+          "line": 21,
+          "column": 17
+        },
+        "bytes": {
+          "start": 326,
+          "end": 336
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 22,
+          "column": 7
+        },
+        "end": {
+          "line": 22,
+          "column": 17
+        },
+        "bytes": {
+          "start": 343,
+          "end": 353
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 23,
+          "column": 7
+        },
+        "end": {
+          "line": 23,
+          "column": 17
+        },
+        "bytes": {
+          "start": 360,
+          "end": 370
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 24,
+          "column": 7
+        },
+        "end": {
+          "line": 24,
+          "column": 17
+        },
+        "bytes": {
+          "start": 377,
+          "end": 387
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    },
+    {
+      "rule": "t.lambda",
+      "path": "pk/other/many.py",
+      "span": {
+        "start": {
+          "line": 25,
+          "column": 7
+        },
+        "end": {
+          "line": 25,
+          "column": 17
+        },
+        "bytes": {
+          "start": 394,
+          "end": 404
+        }
+      },
+      "message": "no lambda",
+      "severity": "warning",
+      "tags": {
+        "law": "2"
+      }
+    }
+  ],
+  "summary": {
+    "total": 28,
+    "by_severity": {
+      "error": 3,
+      "warning": 25
+    },
+    "by_tag": {
+      "kit": {
+        "py": 1
+      },
+      "law": {
+        "10": 1,
+        "2": 25,
+        "5": 1
+      },
+      "set": {
+        "LEXIS": 2,
+        "OST": 1
+      }
+    },
+    "by_rule": {
+      "t.elif": 1,
+      "t.lambda": 25,
+      "t.swap": 1,
+      "t.untagged": 1
+    }
+  },
+  "rules": {
+    "t.elif": "no elif",
+    "t.lambda": "no lambda",
+    "t.swap": "use new",
+    "t.untagged": "untagged rule"
+  }
+}

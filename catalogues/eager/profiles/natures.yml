@@ -1,0 +1,29 @@
+- kind: driver
+  home: ["src/*/providers/drivers/*/*.py", "src/*/providers/drivers/*/*/driver.py"]
+  suffix: Driver
+  methods: [__aenter__, __aexit__, health]
+  attributes: [spec]
+  thresholds: {lines: 500, companions: 3}
+
+- kind: adapter
+  home: ["src/*/providers/adapters/*/*.py", "src/*/providers/adapters/*/*/adapter.py"]
+  suffix: Adapter
+  methods: [__aenter__, __aexit__, health]
+  attributes: [spec]
+  thresholds: {lines: 500, companions: 3}
+
+- kind: engine
+  home: ["src/*/engines/**/*.py"]
+  suffix: Engine
+  thresholds: {lines: 500, companions: 3}
+
+- kind: processor
+  home: ["src/*/processors/**/*.py"]
+  suffix: Processor
+  thresholds: {lines: 500, companions: 3}
+
+- kind: port
+  home: ["src/*/ports/*.py"]
+  suffix: Port
+  bases: [typing.Protocol, typing_extensions.Protocol]
+  never: [abc.ABC]

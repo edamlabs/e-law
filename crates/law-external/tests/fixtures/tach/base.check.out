@@ -1,0 +1,12 @@
+[
+  {
+    "Global": {
+      "severity": "Warning",
+      "details": {
+        "Configuration": {
+          "NoFirstPartyImportsFound": []
+        }
+      }
+    }
+  }
+]

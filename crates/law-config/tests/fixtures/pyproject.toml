@@ -1,0 +1,13 @@
+[project]
+name = "sample"
+version = "0.1.0"
+
+[tool.law]
+roots = ["src", "tests"]
+catalogues = ["eager", "law/"]
+select = ["ALL"]
+ignore = ["law=prompts", "lexis.loop"]
+exceptions = "law.exceptions.toml"
+
+[tool.law.profiles.engine.thresholds]
+lines = 400

@@ -1,0 +1,8 @@
+kit         rules  engines                          fixable (safe/unsafe/none)  untestable
+(untagged)  7      pattern 4, ruff 1, tree 1, ty 1  1/1/5                       2
+
+Stays prose:
+  kit py: carries no law at all
+  (untagged): surveying happens before the code exists
+  (untagged): no rule yet: graph (dead privates)
+  (untagged): no rule yet: pattern (membership in a list)

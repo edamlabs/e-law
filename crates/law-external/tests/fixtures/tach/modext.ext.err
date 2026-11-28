@@ -1,0 +1,6 @@
+External Dependencies
+[FAIL] src/pkg/core/model.py:1: Module 'pkg.core' does not declare a dependency on external package 'requests'.
+[FAIL] src/pkg/core/model.py:2: Module 'pkg.core' cannot depend on external package 'yaml'.
+
+Consider updating the corresponding pyproject.toml file,
+or add the dependencies to the 'external.exclude' list in tach.toml.

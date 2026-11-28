@@ -1,0 +1,1 @@
+[{"cell":null,"code":"invalid-syntax","end_location":{"column":1,"row":3},"filename":"/tmp/lawobs/c.py","fix":null,"location":{"column":1,"row":3},"message":"unexpected EOF while parsing","name":"invalid-syntax","noqa_row":null,"severity":"error","url":null}]
