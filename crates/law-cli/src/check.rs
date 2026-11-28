@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use jiff::{Timestamp, ZonedDateTime};
-use law_engine::{Census, Environment, Extent, Fault, Outcome, Run, Timing};
+use law_engine::{ALSO, Census, Environment, Extent, Fault, Outcome, Run, Timing};
 use law_model::{Edit, Finding, Safety, Severity};
 use law_report::Tally;
 
@@ -40,6 +40,24 @@ impl CheckArgs {
         }
     }
 
+    /// What a fix applied leaves for the author: the lines its message gained, which say where the
+    /// module it moved is also named outside Python, and which no later report carries, the finding being gone.
+    fn noted(applied: &[Finding]) {
+        let mut err = io::stderr().lock();
+        applied
+            .iter()
+            .flat_map(|finding| {
+                finding
+                    .message
+                    .lines()
+                    .filter(|line| line.starts_with(ALSO))
+                    .map(|line| format!("{}{line}", finding.path.display()))
+            })
+            .for_each(|line| {
+                let _ = writeln!(err, "{line}");
+            });
+    }
+
     fn fixed(&self, run: &Run, opened: &Opened, paths: &[PathBuf], at: Timestamp) -> (Outcome, usize, Vec<Fault>) {
         let allow = if self.unsafe_fixes {
             Safety::Unsafe
@@ -54,6 +72,7 @@ impl CheckArgs {
             let applied = law_fix::apply(opened.root(), &outcome.report.findings, allow);
             fixed += applied.fixed.len();
             Self::followed(opened.root(), &mut paths, &applied.fixed);
+            Self::noted(&applied.fixed);
             let failed = !applied.faults.is_empty();
             faults.extend(applied.faults.into_iter().map(Fault::Fix));
             match (applied.fixed.is_empty(), failed) {

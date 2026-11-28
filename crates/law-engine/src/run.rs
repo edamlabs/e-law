@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -185,10 +185,12 @@ impl Run {
         declined: &mut Vec<(Safety, Fault)>,
     ) -> Extent {
         let walked: HashSet<&Path> = files.iter().map(PathBuf::as_path).collect();
+        let mut every: BTreeSet<PathBuf> = files.iter().cloned().collect();
         if explicit {
             let starts = Self::starts(root, &self.roots, &mut sink.faults);
             let modules = Walk::new(root, &starts);
             sink.faults.extend(modules.faults);
+            every.extend(modules.files.iter().cloned());
             let unread: Vec<&PathBuf> = modules
                 .files
                 .iter()
@@ -209,11 +211,8 @@ impl Run {
         found.findings.retain(|finding| walked.contains(finding.path.as_path()));
         sink.absorb(found);
         let read = |path: &Path| fs::read_to_string(root.join(path)).ok();
-        let relocation = Relocation {
-            graph: &graph,
-            ancestry: &self.ancestry,
-            read: &read,
-        };
+        let every: Vec<PathBuf> = every.into_iter().collect();
+        let relocation = Relocation::new(&graph, &self.ancestry, &read, &every, Some(root));
         declined.extend(
             self.relocator
                 .attach(&relocation, &mut sink.findings)

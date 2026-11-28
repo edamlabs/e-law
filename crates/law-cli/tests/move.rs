@@ -140,7 +140,7 @@ fn move_from_import_mixed_on_a_one_line_block_is_joined_by_a_semicolon() -> Outc
 fn move_type_checking_imports_and_string_annotations() -> Outcome {
     rewrites(
         "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    import pkg.engines.cache\n    from pkg.engines.cache import CacheEngine\n\n\ndef f(a: \"pkg.engines.cache.CacheEngine\", b: 'list[pkg.engines.cache.Row] | None') -> \"pkg.engines.cache.Row\":\n    note = \"pkg.engines.cache.CacheEngine\"\n    return b\n",
-        "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    import pkg.engines.cache.engine\n    from pkg.engines.cache.engine import CacheEngine\n\n\ndef f(a: \"pkg.engines.cache.engine.CacheEngine\", b: 'list[pkg.engines.cache.engine.Row] | None') -> \"pkg.engines.cache.engine.Row\":\n    note = \"pkg.engines.cache.CacheEngine\"\n    return b\n",
+        "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    import pkg.engines.cache.engine\n    from pkg.engines.cache.engine import CacheEngine\n\n\ndef f(a: \"pkg.engines.cache.engine.CacheEngine\", b: 'list[pkg.engines.cache.engine.Row] | None') -> \"pkg.engines.cache.engine.Row\":\n    note = \"pkg.engines.cache.engine.CacheEngine\"\n    return b\n",
     )
 }
 
@@ -217,6 +217,242 @@ fn move_the_project_root_spelling_of_a_module_is_rewritten_as_written() -> Outco
         text(&project, "src/pkg/app.py")?,
         "from src.pkg.engines.cache.engine import CacheEngine\n"
     );
+    Ok(())
+}
+
+///// strings that name the module /////
+
+fn strings(before: &str, after: &str) -> Outcome {
+    let project = world(&[("tests/test_patch.py", before)])?;
+    let out = project.check(&BOTH)?;
+    assert_eq!(out.code, 0, "{out:?}");
+    assert_eq!(text(&project, "tests/test_patch.py")?, after, "{out:?}");
+    assert_eq!(text(&project, MOVED)?, BODY);
+    assert!(!project.path().join(MODULE).exists());
+    Ok(())
+}
+
+#[test]
+fn move_strings_of_patching_calls_in_a_file_that_imports_nothing_of_the_module() -> Outcome {
+    strings(
+        "def test_a(mocker, monkeypatch):\n    mocker.patch(\"pkg.engines.cache.CacheEngine\")\n    mocker.patch.object(x, 'y', new=\"pkg.engines.cache.Row.field\")\n    monkeypatch.setattr(\"pkg.engines.cache.Row\", 1)\n    importlib.import_module(\"pkg.engines.cache\")\n",
+        "def test_a(mocker, monkeypatch):\n    mocker.patch(\"pkg.engines.cache.engine.CacheEngine\")\n    mocker.patch.object(x, 'y', new=\"pkg.engines.cache.engine.Row.field\")\n    monkeypatch.setattr(\"pkg.engines.cache.engine.Row\", 1)\n    importlib.import_module(\"pkg.engines.cache.engine\")\n",
+    )
+}
+
+#[test]
+fn move_strings_raw_unicode_single_and_triple_quoted() -> Outcome {
+    strings(
+        r#"a = r"pkg.engines.cache.X"
+b = u'pkg.engines.cache'
+c = """pkg.engines.cache.Y"""
+d = '''pkg.engines.cache'''
+e = R'pkg.engines.cache.Z'
+"#,
+        r#"a = r"pkg.engines.cache.engine.X"
+b = u'pkg.engines.cache.engine'
+c = """pkg.engines.cache.engine.Y"""
+d = '''pkg.engines.cache.engine'''
+e = R'pkg.engines.cache.engine.Z'
+"#,
+    )
+}
+
+#[test]
+fn move_strings_in_the_module_itself_and_beside_an_import_of_it() -> Outcome {
+    let project = world(&[(
+        "src/pkg/app.py",
+        "from pkg.engines.cache import Row\n\nNAME = \"pkg.engines.cache.Row\"\n",
+    )])?;
+    project.file(MODULE, "WHO = \"pkg.engines.cache\"\n\n\nclass CacheEngine: ...\n")?;
+    let out = project.check(&BOTH)?;
+    assert_eq!(out.code, 0, "{out:?}");
+    assert_eq!(
+        text(&project, "src/pkg/app.py")?,
+        "from pkg.engines.cache.engine import Row\n\nNAME = \"pkg.engines.cache.engine.Row\"\n"
+    );
+    assert_eq!(
+        text(&project, MOVED)?,
+        "WHO = \"pkg.engines.cache.engine\"\n\n\nclass CacheEngine: ...\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn move_strings_through_the_project_root_spelling_and_every_root() -> Outcome {
+    let project = Project::with_rules("[\"src\", \".\"]", RULE)?;
+    project.file("cat/profiles/p.yml", PROFILE)?;
+    project.file(MODULE, BODY)?;
+    project.file(
+        "tools/run.py",
+        "a = \"src.pkg.engines.cache.Row\"\nb = \"pkg.engines.cache.Row\"\n",
+    )?;
+    let out = project.check(&BOTH)?;
+    assert_eq!(out.code, 0, "{out:?}");
+    assert_eq!(
+        text(&project, "tools/run.py")?,
+        "a = \"src.pkg.engines.cache.engine.Row\"\nb = \"pkg.engines.cache.engine.Row\"\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn move_strings_that_only_look_alike_or_are_not_names_are_left() -> Outcome {
+    let same = concat!(
+        "import logging\n\n",
+        "a = \"pkg.engines.cachex\"\n",
+        "b = \"pkg.engines.cachex.Y\"\n",
+        "c = \"pkg.engines.cache2.Y\"\n",
+        "d = \"x.pkg.engines.cache.Y\"\n",
+        "e = \"see pkg.engines.cache.Y for details\"\n",
+        "f = \"pkg.engines.cache.\"\n",
+        "g = \"pkg.engines.cache.1x\"\n",
+        "h = \"pkg.engines.cache:Y\"\n",
+        "i = \"SELECT * FROM pkg.engines.cache.Y\"\n",
+        "logging.info(\"pkg.engines.cache.Y failed\")\n",
+        "j = \"pkg.engines\"\n",
+        "k = \"cache\"\n",
+        "l = \"\"\n",
+        "m = b\"pkg.engines.cache.Y\"\n",
+        "n = f\"pkg.engines.cache.{j}\"\n",
+        "o = \"pkg.engines.cache.\\n\"\n",
+        "# pkg.engines.cache.Y\n",
+        "\"pkg.engines.cache.Y\"\n",
+        "\n\ndef f():\n    \"\"\"pkg.engines.cache.Y\"\"\"\n",
+        "\n\nclass K:\n    \"pkg.engines.cache.Y\"\n",
+    );
+    let project = world(&[("tests/test_like.py", same)])?;
+    let out = project.check(&BOTH)?;
+    assert_eq!(out.code, 0, "{out:?}");
+    assert_eq!(text(&project, "tests/test_like.py")?, same);
+    assert_eq!(text(&project, MOVED)?, BODY);
+    Ok(())
+}
+
+#[test]
+fn move_strings_in_a_file_outside_the_run_paths_are_still_rewritten() -> Outcome {
+    let project = world(&[
+        ("src/pkg/engines/store.py", "class StoreEngine: ...\n"),
+        ("tests/test_patch.py", "a = \"pkg.engines.store.StoreEngine\"\n"),
+    ])?;
+    let out = project.check(&["--fix", "--unsafe-fixes", "src/pkg/engines/store.py"])?;
+    assert_eq!(out.code, 0, "{out:?}");
+    assert_eq!(
+        text(&project, "tests/test_patch.py")?,
+        "a = \"pkg.engines.store.engine.StoreEngine\"\n"
+    );
+    Ok(())
+}
+
+#[test]
+fn move_strings_of_a_read_only_file_are_a_fault_and_nothing_is_written() -> Outcome {
+    let patch = "a = \"pkg.engines.cache.Row\"\n";
+    let project = world(&[("tests/test_patch.py", patch)])?;
+    fs::set_permissions(
+        project.path().join("tests/test_patch.py"),
+        fs::Permissions::from_mode(0o444),
+    )?;
+    let out = project.check(&BOTH)?;
+    blocked(&out, "read-only");
+    untouched(&project, &[("tests/test_patch.py", patch)])
+}
+
+#[test]
+fn move_strings_are_in_the_fix_of_the_finding_not_of_a_second_one() -> Outcome {
+    let project = world(&[("tests/test_patch.py", "a = \"pkg.engines.cache.Row\"\n")])?;
+    let report = project.json(&[])?;
+    let edits = report["findings"][0]["fix"]["edits"].as_array().ok_or("no edits")?;
+    assert_eq!(edits.len(), 2, "{report}");
+    assert_eq!(edits[0]["path"], "tests/test_patch.py");
+    assert_eq!(edits[0]["text"], "pkg.engines.cache.engine");
+    assert_eq!(edits[1]["edit"], "move");
+    Ok(())
+}
+
+///// what is named outside Python is reported, never edited /////
+
+const MENTIONS: [(&str, &str); 3] = [
+    ("pyproject.toml", "[tool.x]\nname = \"pkg.engines.cache\"\n"),
+    ("Dockerfile", "FROM python\nCOPY src/pkg/engines/cache.py /app/\n"),
+    ("docs/a.md", "nothing\nof\nit\n"),
+];
+
+#[test]
+fn move_the_non_python_mentions_are_reported_in_the_message_and_never_edited() -> Outcome {
+    let project = world(&[("src/pkg/app.py", "from pkg.engines.cache import Row\n")])?;
+    for (path, body) in MENTIONS {
+        project.file(path, body)?;
+    }
+    let plain = project.check(&[])?;
+    assert!(
+        plain
+            .stdout
+            .contains("t.move over: 2 lines, over 0\n: also named in Dockerfile:2\n: also named in cat/rules/r.yml:9\n: also named in pyproject.toml:2\n"),
+        "{}",
+        plain.stdout
+    );
+    assert!(!plain.stdout.contains("docs/a.md"), "{}", plain.stdout);
+    let out = project.check(&BOTH)?;
+    assert_eq!(out.code, 0, "{out:?}");
+    assert!(
+        out.stderr.contains(": also named in pyproject.toml:2") && out.stderr.contains(": also named in Dockerfile:2"),
+        "{}",
+        out.stderr
+    );
+    for (path, body) in MENTIONS {
+        assert_eq!(text(&project, path)?, body, "{path}");
+    }
+    assert!(project.path().join(MOVED).exists());
+    Ok(())
+}
+
+#[test]
+fn move_a_name_written_as_a_regular_expression_is_a_mention() -> Outcome {
+    let project = world(&[])?;
+    project.file(
+        "pyproject.toml",
+        "[tool]\nfilterwarnings = ['ignore:Method pkg\\.engines\\.cache\\.CacheEngine\\.run:W']\n",
+    )?;
+    let out = project.check(&[])?;
+    assert!(
+        out.stdout.contains(": also named in pyproject.toml:2"),
+        "{}",
+        out.stdout
+    );
+    Ok(())
+}
+
+#[test]
+fn move_a_non_python_name_that_only_looks_alike_is_not_a_mention() -> Outcome {
+    let project = world(&[])?;
+    project.file(
+        "pyproject.toml",
+        "a = \"pkg.engines.cachex\"\nb = \"x.pkg.engines.cache\"\nc = \"src/pkg/engines/cache.pyc\"\nd = \"pkg_engines_cache\"\n",
+    )?;
+    let out = project.check(&[])?;
+    assert!(!out.stdout.contains("pyproject"), "{}", out.stdout);
+    Ok(())
+}
+
+#[test]
+fn move_in_a_repository_the_mentions_are_the_tracked_files_only() -> Outcome {
+    let project = world(&[])?;
+    project.file(".gitignore", "ignored.md\n")?;
+    project.file("tracked.md", "pkg.engines.cache\n")?;
+    project.file("ignored.md", "pkg.engines.cache\n")?;
+    project.file("untracked.md", "pkg.engines.cache\n")?;
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .current_dir(project.path())
+            .args(args)
+            .output()
+    };
+    git(&["init", "-q"])?;
+    git(&["add", ".gitignore", "tracked.md", "cat", "law.toml", "src"])?;
+    let out = project.check(&[])?;
+    assert!(out.stdout.contains(": also named in tracked.md:1"), "{}", out.stdout);
+    assert!(!out.stdout.contains("untracked.md"), "{}", out.stdout);
+    assert!(!out.stdout.contains("ignored.md"), "{}", out.stdout);
     Ok(())
 }
 
@@ -473,5 +709,24 @@ fn move_law_test_fails_a_wrong_expectation() -> Outcome {
     let out = project.run(&["test"])?;
     assert_eq!(out.code, 1, "{out:?}");
     assert!(out.stdout.contains("the fix gives"), "{}", out.stdout);
+    Ok(())
+}
+
+#[test]
+fn move_law_test_proves_a_string_across_files() -> Outcome {
+    let rule = RULE
+        .replace(
+            "expect: {src/pkg/engines/cache/engine.py: \"class CacheEngine: ...\\n\"}",
+            "expect: {src/pkg/engines/cache/engine.py: \"class CacheEngine: ...\\n\", tests/test_a.py: \"x = 'pkg.engines.cache.engine.A'\\n\"}",
+        )
+        .replace(
+            "files: {src/pkg/engines/cache.py: \"class CacheEngine: ...\\n\"}",
+            "files: {src/pkg/engines/cache.py: \"class CacheEngine: ...\\n\", tests/test_a.py: \"x = 'pkg.engines.cache.A'\\n\"}",
+        );
+    assert_ne!(rule, RULE);
+    let project = Project::with_rules("[\"src\", \"tests\"]", &rule)?;
+    project.file("cat/profiles/p.yml", PROFILE)?;
+    let out = project.run(&["test"])?;
+    assert_eq!(out.code, 0, "{out:?}");
     Ok(())
 }

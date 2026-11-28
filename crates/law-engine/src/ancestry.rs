@@ -245,6 +245,16 @@ impl Ancestry {
         Self::dotted(path)
     }
 
+    /// Every dotted name the module at `path` goes by: one per source root that holds it, and the project root's.
+    pub(crate) fn spellings(&self, path: &Path) -> Vec<String> {
+        self.roots
+            .iter()
+            .map(PathBuf::as_path)
+            .chain([Path::new("")])
+            .filter_map(|root| path.strip_prefix(root).ok().map(Self::dotted))
+            .collect()
+    }
+
     /// The name the module at `to` goes by where `written` names the module at `from`: the same source root, or the
     /// project root itself, spells both; none when `written` is no spelling of `from`, or `to` lies outside the root.
     pub(crate) fn respelled(&self, written: &str, from: &Path, to: &Path) -> Option<String> {

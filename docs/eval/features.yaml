@@ -82,3 +82,15 @@ features:
     kind: feature
     since: unknown
     plan: TODO_sentinel#9
+
+  - id: fix.module-move-strings
+    title: "a module move rewrites the strings that name it and reports the non-Python files that do"
+    description: >-
+      The same fix rewrites every Python string whose whole value is the moved module's dotted name or that name and a
+      dotted tail (`mocker.patch("pkg.mod.X")`, `importlib.import_module`), in every file of the run, importer or not;
+      byte, f-, docstring and prose strings are left. Files that are not Python and name the module or its path (git's
+      tracked files, else the walk) are reported on the finding, `: also named in <path>:<line>`, never edited
+      (`crates/law-cli/tests/move.rs`).
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#9

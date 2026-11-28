@@ -113,12 +113,9 @@ impl Proven {
             .collect();
         let graph = Graph::new(ancestry, &outlines);
         let read = |path: &Path| files.get(path).cloned();
+        let every: Vec<PathBuf> = files.keys().cloned().collect();
         relocator.attach(
-            &Relocation {
-                graph: &graph,
-                ancestry,
-                read: &read,
-            },
+            &Relocation::new(&graph, ancestry, &read, &every, None),
             &mut sink.findings,
         );
         sink.findings

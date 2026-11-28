@@ -1,11 +1,16 @@
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use ast_grep_language::{LanguageExt, SupportLang};
 use law_model::{Edit, Finding, Fix, Profile, RuleId, Safety};
+use rayon::prelude::*;
 
 use crate::ancestry::Ancestry;
 use crate::digraph::Graph;
+use crate::literal::Literal;
+use crate::mention::Others;
 use crate::source::Syntax;
 
 const IMPORT: &str = "import_statement";
@@ -27,6 +32,8 @@ const PREFIXES: &str = "rRuU";
 const CRLF: &str = "\r\n";
 const LF: &str = "\n";
 const JOINT: &str = "; ";
+/// What the line starts with that says a moved module is also named in a file that is not Python.
+pub const ALSO: &str = ": also named in ";
 const PYTHON: &str = "py";
 const PACKAGE: &str = "__init__";
 
@@ -48,11 +55,21 @@ pub(crate) enum Refusal {
     Unnamed { path: PathBuf },
 }
 
-/// What rewrites the project for a module moved: the import graph, the resolver that built it, and what reads a file.
+/// What reads a file of the project, by its path from the root.
+pub(crate) type Reader<'a> = &'a (dyn Fn(&Path) -> Option<String> + Sync);
+
+/// What rewrites the project for a module moved: the import graph, the resolver that built it, what reads a file, the
+/// Python files the run saw — every one, whether or not it imports anything of the module, for a string may name it
+/// alone — and, where the project is on disk, its root, under which the non-Python files that mention the module are
+/// read. The strings and the others are read once, at the first move asked.
 pub(crate) struct Relocation<'a> {
-    pub(crate) graph: &'a Graph,
-    pub(crate) ancestry: &'a Ancestry,
-    pub(crate) read: &'a dyn Fn(&Path) -> Option<String>,
+    graph: &'a Graph,
+    ancestry: &'a Ancestry,
+    read: Reader<'a>,
+    files: &'a [PathBuf],
+    root: Option<&'a Path>,
+    literals: OnceLock<Vec<Literal>>,
+    others: OnceLock<Others>,
 }
 
 /// One module moving.
@@ -129,6 +146,12 @@ impl Relocator {
                 let to = rule.target(&finding.path)?;
                 match relocation.edits(&finding.path, &to) {
                     Ok(edits) => {
+                        finding.message.extend(
+                            relocation
+                                .mentions(&finding.path)
+                                .into_iter()
+                                .flat_map(|mention| [LF, ALSO].into_iter().map(str::to_owned).chain([mention])),
+                        );
                         finding.fix = Some(Fix {
                             safety: rule.safety,
                             edits,
@@ -147,9 +170,47 @@ impl Relocator {
     }
 }
 
-impl Relocation<'_> {
-    /// The edits that move the module at `from` to `to` and rewrite, exactly, every import of it in the project: the
-    /// replacements, file by file, then the move.
+impl<'a> Relocation<'a> {
+    /// The relocation over a graph, its resolver, a reader and the Python files the run saw; `root` is where the
+    /// project lies on disk, none for one in memory.
+    pub(crate) fn new(
+        graph: &'a Graph,
+        ancestry: &'a Ancestry,
+        read: Reader<'a>,
+        files: &'a [PathBuf],
+        root: Option<&'a Path>,
+    ) -> Self {
+        Self {
+            graph,
+            ancestry,
+            read,
+            files,
+            root,
+            literals: OnceLock::new(),
+            others: OnceLock::new(),
+        }
+    }
+
+    fn literals(&self) -> &[Literal] {
+        self.literals.get_or_init(|| {
+            self.files
+                .par_iter()
+                .filter_map(|path| (self.read)(path).map(|text| Literal::all(path, &text)))
+                .flatten()
+                .collect()
+        })
+    }
+
+    /// The first line of each non-Python file of the project that names the module at `from`, by a dotted name or by
+    /// its path: `path:line`.
+    pub(crate) fn mentions(&self, from: &Path) -> Vec<String> {
+        self.root
+            .map(|root| self.others.get_or_init(|| Others::new(root)))
+            .map_or_else(Vec::new, |others| others.mentions(&self.ancestry.spellings(from), from))
+    }
+
+    /// The edits that move the module at `from` to `to` and rewrite, exactly, every import of it in the project and
+    /// every string that is its dotted name: the replacements, file by file, then the move.
     pub(crate) fn edits(&self, from: &Path, to: &Path) -> Result<Vec<Edit>, Refusal> {
         let module = self
             .graph
@@ -158,10 +219,31 @@ impl Relocation<'_> {
         let moving = Moving { by: self, from, to };
         moving.within()?;
         let nodes = self.graph.nodes();
-        let mut edits: Vec<Edit> = Vec::new();
+        let mut found: BTreeMap<PathBuf, Vec<(Range<usize>, String)>> = BTreeMap::new();
         for importer in self.graph.importers(module) {
-            edits.extend(moving.importer(&nodes[importer].path, nodes[importer].within())?);
+            let path = &nodes[importer].path;
+            found
+                .entry(path.clone())
+                .or_default()
+                .extend(moving.importer(path, nodes[importer].within())?);
         }
+        for literal in self.literals() {
+            if let Some(edit) = moving.literal(literal)? {
+                found.entry(literal.path.clone()).or_default().push(edit);
+            }
+        }
+        let mut edits: Vec<Edit> = found
+            .into_iter()
+            .flat_map(|(path, mut replaced)| {
+                replaced.sort_by_key(|(bytes, _)| (bytes.start, bytes.end));
+                replaced.dedup();
+                replaced.into_iter().map(move |(bytes, text)| Edit::Replace {
+                    path: path.clone(),
+                    bytes,
+                    text,
+                })
+            })
+            .collect();
         edits.push(Edit::Move {
             from: from.to_owned(),
             to: to.to_owned(),
@@ -406,7 +488,7 @@ impl Moving<'_> {
 
     /// The edits in one importer: its import statements, then the attribute chains and annotation strings that spell
     /// by a name a plain `import` of the module bound.
-    fn importer(&self, path: &Path, within: &str) -> Result<Vec<Edit>, Refusal> {
+    fn importer(&self, path: &Path, within: &str) -> Result<Vec<(Range<usize>, String)>, Refusal> {
         let text = self.text(path)?;
         let tree = SupportLang::Python.ast_grep(&text);
         let root = tree.root();
@@ -432,15 +514,24 @@ impl Moving<'_> {
                 }
             }
         }
-        found.edits.sort_by_key(|(bytes, _)| (bytes.start, bytes.end));
-        Ok(found
-            .edits
-            .into_iter()
-            .map(|(bytes, text)| Edit::Replace {
-                path: path.to_owned(),
-                bytes,
-                text,
+        Ok(found.edits)
+    }
+
+    /// A string literal whose whole value is the module's dotted name, or that name followed by a dotted tail of
+    /// identifiers: the name replaced, the tail kept. A name of one segment is never taken for one: `"cache"` is a
+    /// word, not a path.
+    fn literal(&self, literal: &Literal) -> Result<Option<(Range<usize>, String)>, Refusal> {
+        let ends = literal
+            .value
+            .match_indices(DOT)
+            .map(|(at, _)| at)
+            .chain([literal.value.len()]);
+        ends.map(|end| &literal.value[..end])
+            .find(|name| name.contains(DOT) && self.reaches(name))
+            .map(|name| {
+                let start = literal.bytes.start;
+                Ok((start..start + name.len(), self.rename(name)?))
             })
-            .collect())
+            .transpose()
     }
 }
