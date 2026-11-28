@@ -69,3 +69,16 @@ features:
     kind: feature
     since: unknown
     plan: TODO_sentinel#15
+
+  ##### FIX #####
+
+  - id: fix.module-move
+    title: "an entity past its measure moves to its package, every import rewritten"
+    description: >-
+      `law check --fix --unsafe-fixes` on `stratify.entity-lines` or `stratify.entity-companions` moves
+      `<dir>/<name>.py` to `<dir>/<name>/<kind>.py` and rewrites every absolute import of it in the project, byte-exact,
+      staged and renamed so no finding is half applied; a relative import, an occupied target or a read-only file
+      leaves the tree untouched (`crates/law-cli/tests/{move,stratify}.rs`, `crates/law-fix/tests/relocate.rs`).
+    kind: feature
+    since: unknown
+    plan: TODO_sentinel#9
